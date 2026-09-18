@@ -99,8 +99,26 @@ export async function chooseDelivery(form: FormData): Promise<void> {
   const deliveryOptionId = field(form, 'deliveryOptionId');
   const slug = field(form, 'slug');
 
+  // The same gate as `startCheckout`, repeated rather than assumed. A server
+  // action is addressable by id, so "the other action already checked" is not a
+  // property this one can rely on.
+  //
+  // This is also where the order gets its owner. It used to write `'guest'`
+  // unconditionally, which was a live bug: the sandbox shop always asks for a
+  // delivery choice, so every signed-in fan came through here, and
+  // `startPayment` then refused their own order -- the draft said `guest` while
+  // the session said their email address.
+  const fan = await currentFan();
+  if (!fan) {
+    redirect(
+      loginPathFor(
+        `/checkout?item=${encodeURIComponent(wishlistItemId)}&creator=${encodeURIComponent(creatorId)}&slug=${encodeURIComponent(slug)}`,
+      ),
+    );
+  }
+
   const result = await createDraftOrder(checkoutDeps(), {
-    fanId: 'guest',
+    fanId: fan.fanId,
     creatorId,
     wishlistItemId,
     deliveryOptionId,
@@ -153,11 +171,14 @@ export async function startPayment(form: FormData): Promise<void> {
   // Otherwise a fan could approve somebody else's by guessing an id.
   const owner = await prisma.fanOrder.findUnique({
     where: { id: fanOrderId },
-    select: { fanId: true },
+    select: { fanId: true, creator: { select: { publicSlug: true } } },
   });
 
   if (!owner || owner.fanId !== fan.fanId) {
-    backToWishlist('', 'That order is not yours.');
+    // The slug rides along so the note lands on a page that can explain itself.
+    // Passing '' sent the fan to `/w` with a message about an order -- an error
+    // page that tells them nothing about what went wrong.
+    backToWishlist(owner?.creator.publicSlug ?? '', 'That order is not yours.');
   }
 
   const result = await beginPayment(checkoutDeps(), {

@@ -41,11 +41,28 @@ const slugArg = process.argv.find((arg) => arg.startsWith('--slug='));
 const SLUG = slugArg === undefined ? 'demo-creator' : slugArg.slice('--slug='.length);
 
 /**
- * Marks the orders this script owns. Scoping the reset by fan id rather than by
- * creator is what makes it safe to run against a creator that also holds other
- * orders -- the recovery-path order on `demo-creator`, say.
+ * Marks the orders this script owns, so a re-run can clear its own previous work
+ * without touching anything else on the creator.
+ *
+ * This is NOT the order's owner -- see `ownerFanId` below. The two are different
+ * things and conflating them is how the first version of this script parked an
+ * order nobody could approve.
  */
-const FAN_ID = 'fan-ceiling-demo';
+const PARK_MARKER = 'fan-ceiling-demo';
+
+/**
+ * Who will be allowed to approve the parked order.
+ *
+ * It has to be the fan you are signed in as. `startPayment` refuses an order
+ * whose `fanId` is not the session's, so an order parked under some other fan
+ * can be *shown* but never *approved* -- and the approval act is the half of the
+ * beat that matters.
+ *
+ * `fanId` IS the fan's email (`verifyLoginCode` returns the normalised email).
+ * Defaulting to the most recent login code means this just works straight after
+ * the sign-in §5 already tells you to do first; `--fan=` overrides it.
+ */
+const fanArg = process.argv.find((arg) => arg.startsWith('--fan='));
 
 const SANDBOX_MERCHANT_ID = 'merchant_untitled_fidget_shop';
 const SANDBOX_SKU = 'gid://shopify/ProductVariant/43945235349570'; // Hex Token Fidget
@@ -146,7 +163,7 @@ if (item === null) {
  * behind at a URL somebody might still open.
  */
 const previous = await prisma.fanOrder.findMany({
-  where: { fanId: FAN_ID },
+  where: { fanId: PARK_MARKER },
   select: { id: true, quoteId: true, creator: { select: { publicSlug: true } } },
 });
 
@@ -157,7 +174,7 @@ if (previous.length > 0) {
     });
   }
 
-  await prisma.fanOrder.deleteMany({ where: { fanId: FAN_ID } });
+  await prisma.fanOrder.deleteMany({ where: { fanId: PARK_MARKER } });
 
   const quoteIds = previous
     .map((order) => order.quoteId)
@@ -169,6 +186,34 @@ if (previous.length > 0) {
 } else {
   console.log('no previously parked order');
 }
+
+// ---------------------------------------------------------------------------
+// 2b. Who can approve it
+// ---------------------------------------------------------------------------
+
+async function resolveOwnerFanId(): Promise<string> {
+  if (fanArg !== undefined) return fanArg.slice('--fan='.length);
+
+  const latest = await prisma.fanLoginCode.findFirst({
+    orderBy: { createdAt: 'desc' },
+    select: { email: true },
+  });
+
+  if (latest === null) {
+    console.error('\nNo fan has requested a login code yet, so there is nobody to own this');
+    console.error('order. An order parked under the wrong fan can be shown but never');
+    console.error('approved -- startPayment refuses it, with "That order is not yours."');
+    console.error('');
+    console.error('Sign in at /fan/login first, or name the fan explicitly:');
+    console.error('  npx tsx scripts/park-ceiling-order.ts --fan=you@example.com');
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+
+  return latest.email;
+}
+
+const ownerFanId = await resolveOwnerFanId();
 
 // ---------------------------------------------------------------------------
 // 3. A real quote, then a draft. Nothing is held.
@@ -200,7 +245,7 @@ if (priced.state === 'choose_delivery') {
 }
 
 const draft = await createDraftOrder(deps, {
-  fanId: FAN_ID,
+  fanId: ownerFanId,
   creatorId: creator.id,
   wishlistItemId: item.id,
   ...(deliveryOptionId ? { deliveryOptionId } : {}),
@@ -265,6 +310,8 @@ console.log('');
 console.log('order parked at the approval screen');
 console.log(`  fanOrderId     ${order.fanOrderId}`);
 console.log(`  creator        ${SLUG}`);
+console.log(`  owned by       ${ownerFanId}`);
+console.log('                 ^ only this fan can approve it. Sign in as them.');
 console.log(`  state          draft  <- nothing approved, nothing held`);
 console.log(`  amountIsFinal  ${order.amountIsFinal}`);
 console.log('');

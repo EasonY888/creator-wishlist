@@ -228,6 +228,11 @@ afterwards — that is where you find out.
 "maximum, not an exact total" notice *and* the approval field are both on screen — that is the
 approval act from §2. It never deletes the creator and never touches the settled order.
 
+**The parked order is owned by the fan who last signed in.** `startPayment` refuses an order
+whose `fanId` is not the session's, so an order parked under a different fan can be *shown* but
+never *approved*. Park it after step 1 above, or pass `--fan=you@example.com` to say who owns it.
+It prints `owned by …` either way — check that line matches who you will be signed in as.
+
 `live-card-step.ts` seeds a **final** amount, so it renders a plain total. Correct for the card
 beat, useless for the ceiling beat.
 
@@ -235,12 +240,21 @@ Pre-flight prints the parked order's URL in its closing list, so you do not have
 
 Then:
 
-1. Open Tab A on `/w/demo-creator`
-2. Open Tab B on `/ops/evidence` and sign in **once**, then leave it
-3. Zoom the browser to ~125%
-4. Close Slack, email, notifications
+1. **Sign in as a fan, in Tab A, before anything else.** No email provider is configured, so the
+   code is never emailed — get one with `npx tsx scripts/fan-login-code.ts <email>` and enter it
+   at `/fan/login`. The session lasts 30 days.
 
-Run it **twice** — the morning of, and ten minutes out.
+   **This is not optional.** Clicking "Send this gift" on `/w/demo-creator` redirects an
+   anonymous visitor to `/fan/login?next=/checkout?...`, so without a session §2 stalls on a login
+   screen — and the code to get past it is only readable in a terminal, which §2 forbids you from
+   having open. Sign in during rehearsal and the whole journey runs clean.
+2. Open Tab A on `/w/demo-creator`
+3. Open Tab B on `/ops/evidence` and sign in **once**, then leave it
+4. Zoom the browser to ~125%
+5. Close Slack, email, notifications
+
+Run both sign-ins **twice** — the morning of, and ten minutes out. The fan session survives; the
+operator session is the one that can expire.
 
 ---
 
