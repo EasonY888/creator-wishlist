@@ -1,0 +1,17 @@
+{
+  "//": "The smoke and migration scripts are excluded from the app's tsconfig, because they are not part of the Next.js build. That exclusion is correct for `next build` but wrong for checking our work: it meant a missing import in a script only ever surfaced at runtime, half-way through a database run. This config typechecks them separately.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

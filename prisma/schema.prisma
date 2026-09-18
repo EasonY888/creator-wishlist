@@ -1,0 +1,559 @@
+// Creator Wishlist -- data model.
+//
+// Three rules shape this schema:
+//
+//   1. Money states must be unambiguous. The order lifecycle is an enum-backed
+//      state machine, not a set of nullable flags, because "was this fan
+//      charged?" has to have exactly one answer at any instant.
+//   2. Raw provider truth is stored verbatim alongside our derived view. The
+//      reconciler and the operator timeline read the raw value; the fan reads a
+//      projection. Collapsing them loses what reconciliation depends on.
+//   3. Sensitive data is separable by construction, not by remembering to
+//      filter it out of a query.
+
+// Prisma 7 uses the `prisma-client` generator with an explicit output path.
+// The older `prisma-client-js` generator produces nothing here.
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // No `url` here: Prisma 7 removed it from the schema. The CLI reads the
+  // connection from prisma.config.ts, and the runtime client is constructed with
+  // a driver adapter. Keeping the connection string out of this file also means
+  // the schema can be shared or committed without leaking credentials.
+}
+
+// ---------------------------------------------------------------------------
+// Enums -- mirror src/domain so the database cannot hold a state the code
+// refuses to reason about.
+// ---------------------------------------------------------------------------
+
+enum WishlistItemStatus {
+  active
+  quote_required
+  unavailable
+  undeliverable
+  removed
+  merchant_unsupported
+}
+
+enum QuoteState {
+  pending
+  valid_final
+  valid_provisional
+  /// The provider withheld the amount because a delivery choice is outstanding.
+  /// There is no honest total to show in this state.
+  delivery_choice_required
+  expired
+  invalidated
+  changed
+}
+
+enum FanOrderState {
+  draft
+  approved
+  authorized
+  dispatching
+  approval_required
+  processing
+  uncertain
+  succeeded
+  failed
+  partially_fulfilled
+  refunded
+}
+
+/// Mirrors ORDER_ACTIONS in src/domain/order-action.ts.
+enum OrderAction {
+  capture_once
+  poll_later
+  human_handoff
+  release_hold_once
+  reconcile
+}
+
+enum PaymentEventType {
+  authorized
+  captured
+  released
+  refunded
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  done
+  dead
+}
+
+// ---------------------------------------------------------------------------
+// Creator side
+// ---------------------------------------------------------------------------
+
+model Creator {
+  id          String   @id @default(cuid())
+  displayName String
+  avatarUrl   String?
+  raisingFor  String?
+  publicSlug  String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  address       CreatorAddress?
+  wishlistItems WishlistItem[]
+  fanOrders     FanOrder[]
+}
+
+/// Kept in its own table deliberately.
+///
+/// "Only the fulfillment service may read the address" is enforceable when the
+/// address is a separate table that exactly one module is granted access to. If
+/// it were columns on `Creator`, the boundary would instead be a habit about
+/// which queries remember to select them -- and a boundary enforced by habit is
+/// not a boundary.
+model CreatorAddress {
+  id        String  @id @default(cuid())
+  creatorId String  @unique
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  /// Every field below holds CIPHERTEXT, not the value it is named after
+  /// (NFR-2.2). Read and written only through `fulfillment/address-store.ts`,
+  /// which encrypts on the way in and decrypts on the way out.
+  ///
+  /// This is deliberately not hidden behind different column names: the shape of
+  /// the record is unchanged, and a reader that bypasses the store will fail
+  /// loudly at decryption rather than silently working on plaintext.
+  fullName        String
+  streetAddress   String
+  addressLocality String
+  /// Required for CA, US and AU -- those checkouts will not complete without it.
+  addressRegion   String?
+  postalCode      String
+  /// `String`, not `@db.Char(2)`: the ciphertext is far longer than two
+  /// characters, so the original country-code constraint cannot survive
+  /// encryption. The two-character rule is enforced at the boundary instead.
+  addressCountry String
+  phone          String?
+
+  /// SHA-256 over the canonical ship_to payload.
+  ///
+  /// Quotes and approved requests store this digest instead of the address, and
+  /// dispatch re-derives it from the CURRENT address. An address change is then
+  /// detected cryptographically rather than by comparing timestamps, which is
+  /// what makes "changing your address invalidates outstanding quotes" exact.
+  ///
+  /// Computed over the PLAINTEXT, so that rotating the encryption key does not
+  /// change every digest and refuse every in-flight dispatch.
+  digest String
+
+  consentAt            DateTime
+  consentPolicyVersion String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  audits           AddressAccessAudit[]
+  approvedRequests ApprovedRequest[]
+
+  @@index([digest])
+}
+
+/// Every read of the address is recorded. Role-gated access plus an audit trail
+/// is the requirement; this is the trail.
+model AddressAccessAudit {
+  id               String         @id @default(cuid())
+  creatorAddressId String
+  creatorAddress   CreatorAddress @relation(fields: [creatorAddressId], references: [id], onDelete: Cascade)
+
+  actorId   String
+  actorRole String
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([creatorAddressId, createdAt])
+}
+
+model WishlistItem {
+  id        String  @id @default(cuid())
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  /// Persisted at curation time, and the durable identity of this item. A
+  /// browse-time URL or price cannot be re-quoted later, so neither is stored as
+  /// the reference -- merchant plus SKU is.
+  merchantId   String
+  merchantName String?
+  sku          String
+
+  title        String
+  variantTitle String?
+  imageUrl     String?
+
+  currency       String
+  lastPriceMinor Int?
+  lastCheckedAt  DateTime?
+  status         WishlistItemStatus @default(quote_required)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes Quote[]
+
+  /// One row per merchant+SKU per creator: the same product cannot be listed
+  /// twice on a wishlist.
+  @@unique([creatorId, merchantId, sku])
+  @@index([creatorId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Pricing
+// ---------------------------------------------------------------------------
+
+model Quote {
+  id             String       @id @default(cuid())
+  wishlistItemId String
+  wishlistItem   WishlistItem @relation(fields: [wishlistItemId], references: [id], onDelete: Cascade)
+
+  merchantId String
+  state      QuoteState @default(pending)
+
+  /// Mirrors the provider's `amount_is_final`.
+  ///
+  /// `false` means the merchant adds tax at checkout and the figure is a CEILING
+  /// the real charge stays under -- never a total. Telling a fan a ceiling is the
+  /// total is the specific mistake this column exists to prevent.
+  amountIsFinal        Boolean @default(false)
+  expectedAmountMinor  Int?
+  chargeCapMinor       Int?
+  currency             String
+
+  /// Delivery options as returned, with pickup/none excluded.
+  ///
+  /// Exclusion is a DENYlist, not an allowlist. An allowlist of shipping+local
+  /// silently drops the `other` type the provider assigns to any method it does
+  /// not recognize, and the fan would see no delivery choices at a shop that
+  /// delivers perfectly well.
+  fulfillmentOptions Json?
+  selectedOptionId   String?
+
+  /// What was actually priced, in the exact shape the provider was sent.
+  ///
+  /// Stored on the quote rather than re-derived from the wishlist item at
+  /// approval time, because the item can change in between — and a request built
+  /// from changed inputs would bind against a digest of the wrong thing.
+  items Json?
+
+  /// Digest of the destination this was priced for; compared against the
+  /// creator's current address digest to detect invalidation.
+  shipToDigest String
+  expiresAt    DateTime?
+
+  /// The provider's own response, kept for dispute and debugging.
+  raw Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fanOrders FanOrder[]
+
+  @@index([wishlistItemId, state])
+  @@index([shipToDigest])
+}
+
+// ---------------------------------------------------------------------------
+// Order lifecycle
+// ---------------------------------------------------------------------------
+
+model FanOrder {
+  id        String  @id @default(cuid())
+  fanId     String
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id])
+
+  quoteId String?
+  quote   Quote?  @relation(fields: [quoteId], references: [id])
+
+  state FanOrderState @default(draft)
+
+  /// What the fan approved and will be charged: merchant amount plus markup.
+  ///
+  /// Never the provider's figure. The provider's `amount_charged_minor` is used
+  /// internally to reconcile, and may legitimately be lower than this.
+  fanTotalMinor    Int
+  markupMinor      Int
+  merchantCapMinor Int
+  currency         String
+
+  approvedAt DateTime?
+
+  /// The processor's intent for this order, created before the fan enters a card
+  /// and confirmed by the browser.
+  ///
+  /// Deliberately distinct from the CONFIRMED reference, which is recorded in
+  /// `PaymentEvent.providerRef`. This one exists at a moment when no hold does,
+  /// so it must never be read as evidence that anything was charged.
+  paymentIntentRef String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  approvedRequest ApprovedRequest?
+  merchantOrder   MerchantOrder?
+  paymentEvents   PaymentEvent[]
+  orderEvents     OrderEvent[]
+  approvalWindows ApprovalWindow[]
+
+  @@index([fanId, createdAt])
+  @@index([state])
+}
+
+/// The frozen request that dispatch must replay byte-identically.
+///
+/// Deliberately does NOT store `ship_to`. The address is re-hydrated from
+/// `CreatorAddress` at dispatch and the digest recomputed; if the creator
+/// changed their address in the meantime the digest will not match and dispatch
+/// refuses.
+///
+/// That one check enforces two separate requirements at once -- "an address
+/// change invalidates outstanding approvals" and "the approved request cannot be
+/// altered between approval and dispatch" -- without storing the address a
+/// second time, and without relying on the provider to bind the request body
+/// over HTTP, which it does not do.
+model ApprovedRequest {
+  id         String   @id @default(cuid())
+  fanOrderId String   @unique
+  fanOrder   FanOrder @relation(fields: [fanOrderId], references: [id], onDelete: Cascade)
+
+  creatorAddressId String
+  creatorAddress   CreatorAddress @relation(fields: [creatorAddressId], references: [id])
+
+  merchantId          String
+  items               Json
+  currency            String
+  amountMinor         Int
+  constraints         Json?
+  fulfillmentOptionId String?
+
+  shipToDigest  String
+  /// Digest over the whole request, verified immediately before dispatch.
+  requestDigest String
+
+  /// The fan's own words. Dispute evidence, and impossible to reconstruct
+  /// afterwards, so it is captured verbatim rather than summarised.
+  fanApprovalText  String
+  fanApprovedAtIso DateTime
+
+  createdAt DateTime @default(now())
+}
+
+model MerchantOrder {
+  id         String   @id @default(cuid())
+  fanOrderId String   @unique
+  fanOrder   FanOrder @relation(fields: [fanOrderId], references: [id], onDelete: Cascade)
+
+  /// The provider's order id.
+  ///
+  /// Nullable on purpose: an error response can still carry an order id, and a
+  /// lost response means we may never learn it at all. Both are reconcilable
+  /// states, not missing data.
+  providerOrderId String? @unique
+
+  /// Stored verbatim, never overwritten by our derived status. `dispatched` is a
+  /// LIVE status despite reading like an outcome.
+  statusRaw String?
+  /// Derived by nextOrderAction() and persisted so the operator queue is a
+  /// single indexed filter rather than a scan-and-compute.
+  action    OrderAction?
+
+  amountApprovedMinor Int?
+  amountChargedMinor  Int?
+
+  /// Tri-state. `null` does not mean failure -- it is also what a healthy
+  /// in-flight order reports.
+  retryable   Boolean?
+  retryAction String?
+  errorCode   String?
+
+  /// Set BEFORE the dispatch call is issued.
+  ///
+  /// Ordering matters: the claim is durable before the network call, so an
+  /// interrupted dispatch is provably already-attempted and gets reconciled
+  /// rather than retried. This is the double-charge guard.
+  dispatchClaimedAt DateTime?
+  dispatchedAt      DateTime?
+  lastPolledAt      DateTime?
+  pollCount         Int      @default(0)
+
+  /// Provider evidence bundle. CONTAINS THE DELIVERY ADDRESS IN FULL.
+  /// Operator-only. Must never reach a fan-facing serializer or a general log.
+  evidence Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statusRaw])
+  @@index([action])
+}
+
+/// A pending approval window opened by an approval-required response.
+///
+/// The window is short (~5 minutes), so the token is state rather than a flag:
+/// an expired token means a fresh quote and a fresh fan approval, never a
+/// resumed attempt.
+model ApprovalWindow {
+  id         String   @id @default(cuid())
+  fanOrderId String
+  fanOrder   FanOrder @relation(fields: [fanOrderId], references: [id], onDelete: Cascade)
+
+  token String @unique
+
+  /// Operator-facing. The live checkout view can expose the delivery address, so
+  /// this URL is never given to a fan.
+  approvalUrl String
+
+  /// Why approval was required -- a routine security-code refresh and a mandate
+  /// step-up need different handling, and one of them recurs hourly.
+  reason String?
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([fanOrderId, expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Durability and duplicate protection
+// ---------------------------------------------------------------------------
+
+/// Transactional outbox.
+///
+/// An approval writes the FanOrder and its dispatch intent in ONE transaction,
+/// so a crash between "approved" and "sent" cannot lose an order -- the intent
+/// is already durable before anything touches the network.
+model OutboxEvent {
+  id      String       @id @default(cuid())
+  topic   String
+  payload Json
+  status  OutboxStatus @default(pending)
+
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now())
+
+  /// Workers claim rows with SELECT ... FOR UPDATE SKIP LOCKED, which is why
+  /// this project targets Postgres rather than SQLite.
+  claimedAt   DateTime?
+  claimedBy   String?
+  completedAt DateTime?
+  lastError   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([status, availableAt])
+}
+
+/// Duplicate protection, which is entirely ours.
+///
+/// The provider exposes no idempotency header on dispatch, so the unique
+/// constraint here is the enforcement point: a double-submit loses the race in
+/// our database rather than at the merchant's checkout with a real card.
+model IdempotencyKey {
+  id     String @id @default(cuid())
+  key    String @unique
+  scope  String
+
+  /// Hash of the request body. A repeated key with a different body is a
+  /// conflict, not a replay.
+  requestHash String
+
+  fanOrderId   String?
+  responseJson Json?
+
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Money ledger and audit
+// ---------------------------------------------------------------------------
+
+/// Append-only. Never updated, never deleted.
+///
+/// This is what makes "was I charged?" answerable in a single query -- the first
+/// question every fan asks, and the one an async agentic checkout is most likely
+/// to leave ambiguous.
+model PaymentEvent {
+  id         String   @id @default(cuid())
+  fanOrderId String
+  fanOrder   FanOrder @relation(fields: [fanOrderId], references: [id], onDelete: Cascade)
+
+  type        PaymentEventType
+  amountMinor Int
+  currency    String
+
+  /// Reference from the payment processor. Absent for a manual, out-of-band
+  /// merchant-side refund until an operator records one.
+  providerRef String?
+
+  createdAt DateTime @default(now())
+
+  @@index([fanOrderId, createdAt])
+}
+
+/// The operator timeline, and the source for the "stuck" queue.
+model OrderEvent {
+  id         String   @id @default(cuid())
+  fanOrderId String
+  fanOrder   FanOrder @relation(fields: [fanOrderId], references: [id], onDelete: Cascade)
+
+  fromState FanOrderState?
+  toState   FanOrderState?
+  action    OrderAction?
+
+  /// Provider status as reported at the time, verbatim.
+  rawStatus String?
+  note      String?
+  /// Who or what caused this: a service name, or an operator id.
+  actor     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([fanOrderId, createdAt])
+}
+
+/// A one-time code proving a fan controls the email address on their order.
+///
+/// FR-7.1 requires a fan to authenticate before paying, and FR-7.3 has us notify
+/// them if a gift becomes unavailable -- both need an address we have actually
+/// verified. An email typed into a form proves nothing: anyone can type someone
+/// else's. So the address is confirmed by returning a code to it.
+///
+/// The code is stored HASHED, with the server secret as a pepper, because a
+/// database dump must not hand over working codes. Six digits is brute-forceable
+/// in isolation, which is why the attempt counter and the short expiry are part
+/// of the model rather than extra features.
+model FanLoginCode {
+  id    String @id @default(cuid())
+  email String
+
+  /// `sha256(secret : email : code)`. Never the code itself.
+  codeHash String
+
+  /// Short on purpose. A code that sits in an inbox for an hour is a code with an
+  /// hour to be guessed or intercepted.
+  expiresAt DateTime
+
+  /// Set the moment the code is accepted, so a replay cannot log in twice.
+  consumedAt DateTime?
+
+  /// Failures against this code. Reaching the ceiling kills it outright rather
+  /// than allowing an endless retry loop.
+  attempts Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}

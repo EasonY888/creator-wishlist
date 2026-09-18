@@ -1,0 +1,971 @@
+/*
+ * Design tokens and primitives — the Classical pass.
+ *
+ * An editorial, book-like palette: a warm paper ground, serif display type
+ * over serif body text, hairline rules, colour used as a stroke rather than
+ * a fill. Buttons and badges are outlined, never solid-filled.
+ *
+ * Two accessibility rules from the design plan are enforced structurally
+ * here rather than left to each component:
+ *
+ *   1. Interactive targets are at least 44px tall, so checkout actions are
+ *      reachable by touch.
+ *   2. State is never communicated by colour alone — every badge carries a
+ *      text label, and the palette is only a secondary cue.
+ */
+
+:root {
+  --bg: #f3f2f2;
+  --surface: #eae7e7;
+  --surface-2: #e3dfd9;
+  --panel: #f8f4f4;
+  --border: rgba(32, 31, 29, 0.16);
+  --border-strong: #201f1d;
+  --divider-solid: #d7d3d3;
+  --text: #201f1d;
+  --muted: #62605e;
+  --accent: #7d5411;
+  --accent-strong: #5a3b0a;
+  --accent-bright: #b68235;
+  --accent-wash: #fff3e4;
+  --ok: #2f5d43;
+  --ok-wash: #f4f7f4;
+  --warn: #7d5411;
+  --bad: #8c3a2e;
+  --bad-wash: #fdf4f1;
+  --radius: 4px;
+
+  --font-heading: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --font-body: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-mono: 'Courier Prime', 'Courier New', Courier, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  padding: 0 0 4rem;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 4rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+  margin: 0 0 0.5rem;
+}
+
+/* The display heading. Large and light — the bigger the text, the lighter
+   it sets. Wraps to two lines gracefully; that's an editorial technique,
+   not a bug. */
+h1 {
+  font-weight: 400;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+/* Section labels: uppercase, tracked, muted, with a rule above. Used
+   uniformly for every secondary section header (e.g. "Wishlist",
+   "Operator") so the page reads as one system. */
+h2 {
+  font-weight: 600;
+  font-size: 1.35rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2.75rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border-strong);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--accent-strong);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(125, 84, 17, 0.22);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.9rem;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+/* The hero block — a page's opening heading plus its lede, closed off with
+   a rule so what follows reads as a new register. */
+.hero {
+  padding-bottom: 2rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid var(--border-strong);
+}
+
+/* A pull-quote treatment for the one sentence that states the promise. */
+.lede {
+  max-width: 46ch;
+  margin-top: 1rem;
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--accent);
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+
+/* A display-serif treatment for names and titles inside otherwise plain
+   rows — creator names, wishlist item titles. */
+.title-lg {
+  display: block;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: 1.6rem;
+  line-height: 1.25;
+}
+
+.card {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* A hairline list: rows separated by rules rather than boxed in individual
+   cards — the editorial way of showing a series of like things. */
+.list {
+  border-top: 1px solid var(--border-strong);
+}
+
+.list-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 0.15rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Badges carry text, never colour alone. Outlined, not filled — the
+   colour is a stroke, matching every other coloured mark on the page. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  border-radius: calc(var(--radius) * 0.75);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.badge-ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.badge-warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.badge-bad {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+/* A small tracked label for a caveated figure — e.g. "indicative" next to
+   a browse price that isn't a quote yet. */
+.tag-indicative {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 1px dotted var(--accent);
+  padding-bottom: 2px;
+}
+
+button,
+.button {
+  min-height: 44px;
+  padding: 0 1.35rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+button:hover:not(:disabled),
+.button:hover {
+  background: rgba(32, 31, 29, 0.06);
+  text-decoration: none;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary,
+.button.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: transparent;
+}
+
+button.primary:hover,
+.button.primary:hover {
+  background: rgba(125, 84, 17, 0.12);
+}
+
+button.danger {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* A tappable text link that still clears the 44px target rule, for links
+   that read as secondary actions rather than buttons. */
+.link-tap {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* The total is the most important number on any screen. */
+.total {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.total-unknown {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* A bigger .total for the one screen where the figure IS the screen — the
+   checkout confirm step. */
+.total-lg {
+  font-size: 2.75rem;
+}
+
+/* Money has three states that must look different: final, ceiling, unknown
+   (.total-unknown above). This is the ceiling state — the figure is real,
+   but it is a maximum, not a promise, so it takes the warn colour rather
+   than plain ink. No new words, no symbol standing in for one: the adjacent
+   "maximum, not an exact total" notice (already in the markup) carries the
+   claim; this only carries the colour that ties the two together. */
+.total-ceiling {
+  color: var(--warn);
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A large serif figure for a price standing on its own in a list row. */
+.price-lg {
+  font-family: var(--font-heading);
+  font-size: 1.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice {
+  border-left: 3px solid var(--border);
+  padding: 0.85rem 1.1rem;
+  background: transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.notice-warn {
+  border-left-color: var(--warn);
+}
+
+/* The trust notice gets the fuller treatment — a wash and a full border —
+   because it's the promise the page is making, not a passing caveat. */
+.notice-info {
+  border: 1px solid var(--accent);
+  border-left-width: 3px;
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.6rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.15rem 0.4rem;
+  border-radius: calc(var(--radius) * 0.75);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+/* A multi-line code sample, e.g. a URL to paste into a third party's config. */
+.code-block {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+/* A theme baseline for any bare input/select — e.g. the operator forms,
+   which aren't wrapped in `.field`. `.field input` below still wins where
+   both apply. */
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.65rem;
+  min-height: 44px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--accent);
+}
+
+.field {
+  display: block;
+  margin-bottom: 0.85rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.field input:focus-visible,
+.field textarea:focus-visible,
+.field select:focus-visible {
+  border-color: var(--accent);
+}
+
+.empty {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* The wishlist item row: title+status, price, action — three columns that
+   collapse to one on narrow screens. */
+.item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto;
+  gap: 1.75rem;
+  align-items: center;
+}
+
+.item-row > * {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .item-row {
+    grid-template-columns: 1fr !important;
+    align-items: start !important;
+  }
+}
+
+/* Generic colour-only tone utilities. Never the sole carrier of meaning —
+   every place these are used, the adjacent text already says what's true;
+   the tone only ties the number to the claim next to it. */
+.tone-ok {
+  color: var(--ok);
+}
+
+.tone-warn {
+  color: var(--warn);
+}
+
+.tone-bad {
+  color: var(--bad);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   /ops/evidence — the stage page.
+
+   Five sections that must NOT look uniform: section 1 is the hero and
+   dominates; sections 2-4 are normal weight; section 5 is deliberately the
+   quietest thing on the page. Every figure here is still driven by the
+   page's own data — these are layout/type primitives only.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Evidence is dense and wants more width than the reading-measure default;
+   opt in per-page rather than widen `main` for everyone. */
+.evidence-main {
+  max-width: 1360px;
+}
+
+.evidence-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 3rem;
+  align-items: end;
+}
+
+@media (max-width: 780px) {
+  .evidence-header {
+    grid-template-columns: 1fr;
+  }
+}
+
+.evidence-section {
+  margin-top: 4.5rem;
+}
+
+.evidence-section:first-of-type {
+  margin-top: 3rem;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.section-number {
+  font-family: var(--font-heading);
+  font-size: 3rem;
+  line-height: 0.8;
+  color: var(--accent-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 500;
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  border: none;
+  padding: 0;
+}
+
+/* Section 5: the quietest section — the closing note, not the argument. */
+.evidence-section-quiet .section-head {
+  border-bottom-color: var(--border);
+}
+
+.evidence-section-quiet .section-number {
+  font-size: 2.25rem;
+  color: var(--muted);
+}
+
+.evidence-section-quiet .section-head h2 {
+  font-size: clamp(1.4rem, 2.2vw, 1.8rem);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* The hero band — the two figures that should agree and don't. */
+.hero-band {
+  margin-top: 2.5rem;
+  border: 2px solid var(--border-strong);
+  background: var(--panel);
+}
+
+.hero-band-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.hero-band-cell {
+  padding: 2.25rem 2.5rem;
+  border-right: 1px solid var(--border-strong);
+}
+
+.hero-band-cell:last-child {
+  border-right: none;
+}
+
+.hero-band-label {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hero-band-label::before {
+  content: '';
+  width: 1.5rem;
+  border-top: 2px solid currentColor;
+}
+
+.hero-band-value {
+  margin-top: 0.9rem;
+  font-family: var(--font-heading);
+  font-weight: 400;
+  font-size: clamp(2.75rem, 7vw, 5.5rem);
+  line-height: 0.9;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.hero-band-sub {
+  margin-top: 0.9rem;
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+.hero-band-sub-grid {
+  border-top: 1px dashed var(--border-strong);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.hero-band-sub-cell {
+  padding: 1.35rem 2.5rem;
+  border-right: 1px dashed var(--border-strong);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.hero-band-sub-cell:last-child {
+  border-right: none;
+}
+
+.hero-band-sub-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hero-band-sub-note {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.hero-band-sub-value {
+  font-family: var(--font-heading);
+  font-size: 1.85rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The same story told as fees. */
+.fee-row {
+  margin-top: 2.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.fee-cell {
+  padding: 1.5rem 1.85rem;
+  border-right: 1px solid var(--border);
+}
+
+.fee-cell:last-child {
+  border-right: none;
+}
+
+.fee-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fee-value {
+  margin-top: 0.5rem;
+  font-family: var(--font-heading);
+  font-size: 2.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.fee-note {
+  margin-top: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* The punchline — the most prominent thing on the page after the hero
+   figures. Two states: an overcharge (bad) and a clean capture (ok). */
+.punchline {
+  margin-top: 2.5rem;
+  border: 2px solid var(--bad);
+  background: var(--bad-wash);
+  padding: 1.75rem 2.25rem;
+}
+
+.punchline p {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+
+.punchline strong {
+  color: var(--text);
+}
+
+.punchline-ok {
+  border-color: var(--ok);
+  background: var(--ok-wash);
+}
+
+/* A fine-print aside — provenance, caveats. A neutral quote rule, not the
+   accent one `.lede` uses, so it reads as fine print rather than a pull
+   quote. */
+.aside {
+  border-left: 2px solid var(--divider-solid);
+  padding-left: 1.375rem;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.aside strong {
+  color: var(--text);
+}
+
+.provenance-grid {
+  margin-top: 2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+/* The ledger — evidence, not decoration. Columns instead of a run-on line
+   so it stays legible at a distance. */
+.ledger {
+  margin-top: 2.75rem;
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+}
+
+.ledger-head {
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ledger-row {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(100px, auto) minmax(0, 1fr);
+  gap: 0 2rem;
+  padding: 0.85rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-row:last-child {
+  border-bottom: none;
+}
+
+.ledger-amount {
+  text-align: right;
+}
+
+.ledger-ref {
+  overflow-wrap: anywhere;
+}
+
+/* Section 2 — the ciphertext exhibit. Ciphertext should look like
+   ciphertext: monospace, broken at its own separators, never overflowing. */
+.exhibit-table {
+  margin-top: 1.75rem;
+  border: 2px solid var(--border-strong);
+  background: var(--panel);
+}
+
+.exhibit-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.3fr) minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+
+.exhibit-row:last-child {
+  border-bottom: none;
+}
+
+.exhibit-row-flag {
+  background: var(--accent-wash);
+}
+
+.exhibit-label {
+  padding: 1.1rem 1.4rem;
+  border-right: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.exhibit-row-flag .exhibit-label {
+  color: var(--accent);
+}
+
+.exhibit-value {
+  padding: 1.1rem 1.4rem;
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.exhibit-row-flag .exhibit-value {
+  color: var(--accent-strong);
+}
+
+.exhibit-prefix {
+  color: var(--accent);
+}
+
+.exhibit-dot {
+  color: var(--accent-bright);
+}
+
+@media (max-width: 640px) {
+  .exhibit-row {
+    grid-template-columns: 1fr;
+  }
+
+  .exhibit-label {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+/* Section 3 — the leak-guard juxtaposition: clean vs. a list of
+   violations, side by side, not two blocks of text. */
+.leak-compare {
+  margin-top: 2rem;
+  border: 2px solid var(--border-strong);
+  background: var(--panel);
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.4fr);
+}
+
+.leak-cell {
+  padding: 2rem 2.25rem;
+}
+
+.leak-cell + .leak-cell {
+  border-left: 2px solid var(--border-strong);
+}
+
+.leak-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.leak-clean-cell .leak-label {
+  color: var(--ok);
+}
+
+.leak-dirty-cell .leak-label {
+  color: var(--bad);
+}
+
+.leak-clean-word {
+  margin-top: 1rem;
+  font-family: var(--font-heading);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  color: var(--ok);
+}
+
+.leak-list {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.leak-list-item {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  color: var(--bad);
+  overflow-wrap: anywhere;
+  border-bottom: 1px dotted var(--border);
+  padding-bottom: 0.4rem;
+}
+
+.leak-list-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+@media (max-width: 760px) {
+  .leak-compare {
+    grid-template-columns: 1fr;
+  }
+
+  .leak-cell + .leak-cell {
+    border-left: none;
+    border-top: 2px solid var(--border-strong);
+  }
+}
+
+/* Section 4 — a log. Scannable, uniform, calm. */
+.outcome-status {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+/* Section 5 — the quietest section: hairline rows, no boxes. */
+.invariant-grid {
+  margin-top: 1.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 0 3rem;
+}
+
+.invariant-item {
+  padding: 1.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.invariant-item strong {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.invariant-item p {
+  margin: 0.5rem 0 0;
+}
+
+.evidence-footer {
+  margin-top: 3rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--border-strong);
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  color: var(--text);
+}

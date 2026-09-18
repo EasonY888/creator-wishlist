@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: creator-wishlist-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wishlist
+      POSTGRES_PASSWORD: wishlist
+      POSTGRES_DB: wishlist
+    # Host port 5433, not 5432, so this never collides with a Postgres you
+    # already have running locally.
+    ports:
+      - "5433:5432"
+    volumes:
+      - wishlist-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wishlist -d wishlist"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  wishlist-pgdata:
