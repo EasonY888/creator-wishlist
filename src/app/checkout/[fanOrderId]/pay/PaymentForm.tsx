@@ -73,14 +73,32 @@ function CardForm({ fanOrderId, amountLabel }: { fanOrderId: string; amountLabel
     setBusy(true);
     setMessage(null);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      // Stay on the page unless the bank insists on a redirect.
-      redirect: 'if_required',
-      confirmParams: {
-        return_url: `${window.location.origin}/checkout/${fanOrderId}/pay?finish=1`,
-      },
-    });
+    let error;
+    let paymentIntent;
+
+    try {
+      ({ error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        // Stay on the page unless the bank insists on a redirect.
+        redirect: 'if_required',
+        confirmParams: {
+          return_url: `${window.location.origin}/checkout/${fanOrderId}/pay?finish=1`,
+        },
+      }));
+    } catch {
+      // `confirmPayment` can *reject* rather than resolve with `{ error }`, and
+      // there was no catch here -- so an interrupted confirm left the button
+      // reading "Confirming…", disabled, with no message and no way back except
+      // reloading the page. Observed against a PaymentElement that had collapsed
+      // to 2px, where the confirm never settles.
+      //
+      // The card is still on the page, so this is a message, not a dead end.
+      setMessage(
+        'Something interrupted the card step. Nothing has been charged — please try again.',
+      );
+      setBusy(false);
+      return;
+    }
 
     if (error) {
       // The card is still on the page, so this is a message, not a dead end.
@@ -90,6 +108,7 @@ function CardForm({ fanOrderId, amountLabel }: { fanOrderId: string; amountLabel
     }
 
     if (paymentIntent && paymentIntent.status !== 'requires_payment_method') {
+      // `settle` owns `busy` from here, because it navigates on success.
       await settle(fanOrderId, router, setMessage, setBusy);
       return;
     }
