@@ -204,25 +204,49 @@ let parkedOrderId: string | null = null;
 if (dbOk) {
   const { prisma } = await import('../src/db/client');
 
-  const settled = await prisma.fanOrder.findFirst({
-    where: {
-      state: 'succeeded',
-      merchantOrder: { is: { amountChargedMinor: { not: null } } },
-    },
+  /**
+   * Section 1 of `/ops/evidence` is about an order whose capture **exceeded what
+   * the fan was shown**. Select for that property, not for recency.
+   *
+   * This check had the same bug the page had: "newest settled order with a
+   * merchant figure" picks a correctly-captured order the moment one exists, so
+   * it reported GO while the page had no specimen to show.
+   */
+  const settledOrders = await prisma.fanOrder.findMany({
+    where: { state: 'succeeded' },
     orderBy: { createdAt: 'desc' },
-    include: { merchantOrder: true },
+    take: 25,
+    include: {
+      merchantOrder: true,
+      paymentEvents: { select: { type: true, amountMinor: true } },
+    },
   });
 
-  if (settled) {
+  const specimen = settledOrders.find((order) => {
+    const charged = order.merchantOrder?.amountChargedMinor ?? null;
+    if (charged === null) return false;
+
+    const captured = order.paymentEvents
+      .filter((event) => event.type === 'captured')
+      .reduce((sum, event) => sum + event.amountMinor, 0);
+
+    return captured > charged + order.markupMinor;
+  });
+
+  if (specimen) {
+    const captured = specimen.paymentEvents
+      .filter((event) => event.type === 'captured')
+      .reduce((sum, event) => sum + event.amountMinor, 0);
+
     pass(
       'money moment',
-      `order ${settled.id} · charged ${settled.merchantOrder?.amountChargedMinor} vs ${settled.fanTotalMinor}`,
+      `order ${specimen.id} · captured ${captured} though the shop charged ${specimen.merchantOrder?.amountChargedMinor}`,
     );
   } else {
     fail(
       'money moment',
-      'no settled order with a merchant figure',
-      '/ops/evidence section 1 will show a placeholder instead of the hero numbers',
+      'no settled order captured more than the fan was shown',
+      '/ops/evidence section 1 will render its empty state — it needs the order that shows the bug',
     );
   }
 

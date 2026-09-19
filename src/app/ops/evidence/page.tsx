@@ -149,9 +149,27 @@ export default async function EvidencePage() {
     },
   });
 
+  /**
+   * The order this section is *about* — one whose capture exceeded what the fan
+   * was shown.
+   *
+   * Selected by that property, not by recency. It used to take the newest settled
+   * order carrying a merchant figure, which broke the moment a correctly-captured
+   * order became the newest one: the section is titled "the capture that was
+   * wrong", and it would have been describing a capture that was right — with
+   * every sentence beneath it, including the overcharge, false.
+   */
   const money =
-    settledOrders.find((order) => (order.merchantOrder?.amountChargedMinor ?? null) !== null) ??
-    null;
+    settledOrders.find((order) => {
+      const charged = order.merchantOrder?.amountChargedMinor ?? null;
+      if (charged === null) return false;
+
+      const captured = order.paymentEvents
+        .filter((event) => event.type === 'captured')
+        .reduce((sum, event) => sum + event.amountMinor, 0);
+
+      return captured > charged + order.markupMinor;
+    }) ?? null;
 
   // -------------------------------------------------------------------------
   // 2. The address row, read raw
@@ -233,7 +251,8 @@ export default async function EvidencePage() {
       <Section number="1" title="The capture that was wrong — and what the code does now">
         {money === null ? (
           <div className="notice notice-warn">
-            No settled order with a merchant figure yet. Run a live dispatch, then reload.
+            No settled order captured more than the fan was shown. That is the
+            correct outcome, and it means this section has no specimen to show.
           </div>
         ) : (
           (() => {
