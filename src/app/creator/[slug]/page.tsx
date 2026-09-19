@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 
+import { CREATOR_SESSION_COOKIE, readCreatorSession } from '@/creators/auth';
 import { prisma } from '@/db/client';
 import { formatMoney, relativeTime } from '@/presentation/money';
 import { addItem, removeItem, saveAddress } from './actions';
@@ -95,9 +97,47 @@ export default async function CreatorPage({
       },
       address: { select: { id: true } },
     },
+    // The key is a credential, not page data. Prisma selects every scalar by
+    // default, so without this it would be in scope of the render -- one stray
+    // interpolation away from being printed into the page.
+    omit: { accessKey: true },
   });
 
   if (!creator) notFound();
+
+  /**
+   * A creator has no password and no email on file, so the credential is the key
+   * in their private link -- exchanged for this cookie at `/creator/{slug}/enter`.
+   *
+   * A screen rather than `notFound()`, unlike `/orders`: a fan who loses an order
+   * link is confused, but a creator who loses this one has lost the only way to
+   * manage their wishlist, and a 404 would not say so.
+   */
+  const session = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
+
+  if (session?.creatorId !== creator.id) {
+    return (
+      <main>
+        <p className="small">
+          <Link href="/">&larr; All creators</Link>
+        </p>
+
+        <div className="hero">
+          <h1>This wishlist is managed privately</h1>
+        </div>
+
+        <div className="notice notice-info">
+          Managing {creator.displayName}&apos;s gifts needs the private link they were given. It
+          opens with <code>/creator/{creator.publicSlug}/enter?key=&hellip;</code>, and holding that
+          link is what proves who you are &mdash; there is no password to reset.
+        </div>
+
+        <p style={{ marginTop: '1rem' }}>
+          <Link href={`/w/${creator.publicSlug}`}>View this wishlist as a fan</Link>
+        </p>
+      </main>
+    );
+  }
 
   const hasAddress = creator.address !== null;
 

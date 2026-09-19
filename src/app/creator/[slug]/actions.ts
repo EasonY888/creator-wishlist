@@ -1,7 +1,9 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
+import { CREATOR_SESSION_COOKIE, readCreatorSession } from '@/creators/auth';
 import { AddressAccessError, writeCreatorAddress } from '@/fulfillment/address-store';
 import { services } from '@/services';
 import { addWishlistItemByUrl, removeWishlistItem, type AddItemOutcome } from '@/wishlist/curation';
@@ -9,13 +11,43 @@ import { addWishlistItemByUrl, removeWishlistItem, type AddItemOutcome } from '@
 /**
  * Curation actions.
  *
- * There is no creator authentication yet, so the creator id travels in the form.
- * That is a known gap, not a finished access-control story: it means anyone with
- * a creator's id can edit their wishlist. It is recorded here so it is not
- * mistaken for something it isn't.
+ * These used to read the creator id straight out of the form, with no
+ * authentication at all -- recorded here at the time as "a known gap, not a
+ * finished access-control story". It was reachable without credentials: open the
+ * manage page, type your own address, buy a gift, and it ships to you. Not a
+ * leak, because the address is write-only and never readable back, but a
+ * redirected delivery, which is the one thing this product promises cannot
+ * happen.
+ *
+ * The id now comes from the signed session. The form still carries one, and a
+ * value that disagrees is refused rather than ignored: a mismatch means one of
+ * the two is stale, and choosing which would be the bug.
  */
 function field(form: FormData, name: string): string {
   return String(form.get(name) ?? '').trim();
+}
+
+/**
+ * Resolve who is curating, from the session rather than the form.
+ *
+ * Re-checked inside every action rather than only on the page, because a server
+ * action is addressable by id -- a crafted POST never renders the gated page.
+ * Same reasoning as `requireOperator()` on the queue.
+ */
+async function requireCreator(form: FormData): Promise<{ creatorId: string; slug: string }> {
+  const slug = field(form, 'slug');
+  const claimed = field(form, 'creatorId');
+
+  const session = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
+
+  // Back to the page, which explains rather than 404s -- a creator without their
+  // link needs to be told what to look for.
+  if (!session) redirect(`/creator/${encodeURIComponent(slug)}`);
+  if (claimed.length > 0 && claimed !== session.creatorId) {
+    redirect(`/creator/${encodeURIComponent(slug)}`);
+  }
+
+  return { creatorId: session.creatorId, slug };
 }
 
 /** Turn a curation outcome into something a creator can act on. */
@@ -72,8 +104,7 @@ const ADDRESS_LABELS: Record<string, string> = {
  * decision, so that is what this does.
  */
 export async function saveAddress(form: FormData): Promise<void> {
-  const creatorId = field(form, 'creatorId');
-  const slug = field(form, 'slug');
+  const { creatorId, slug } = await requireCreator(form);
 
   const back = (flag: 'note' | 'problem', message: string): never =>
     redirect(`/creator/${encodeURIComponent(slug)}?${flag}=${encodeURIComponent(message)}`);
@@ -125,8 +156,7 @@ export async function saveAddress(form: FormData): Promise<void> {
 }
 
 export async function addItem(form: FormData): Promise<void> {
-  const creatorId = field(form, 'creatorId');
-  const slug = field(form, 'slug');
+  const { creatorId, slug } = await requireCreator(form);
   const url = field(form, 'url');
 
   if (url.length === 0) {
@@ -143,8 +173,7 @@ export async function addItem(form: FormData): Promise<void> {
 }
 
 export async function removeItem(form: FormData): Promise<void> {
-  const creatorId = field(form, 'creatorId');
-  const slug = field(form, 'slug');
+  const { creatorId, slug } = await requireCreator(form);
   const itemId = field(form, 'itemId');
 
   const { db, agnic } = services();

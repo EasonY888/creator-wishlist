@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
+
+import { CREATOR_SESSION_COOKIE, readCreatorSession } from '@/creators/auth';
 import { prisma } from '@/db/client';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +21,13 @@ export default async function HomePage() {
       _count: { select: { wishlistItems: true } },
     },
   });
+
+  /**
+   * `manage` is only offered for the creator whose link this browser has already
+   * used. Showing it to everyone is how the gap stayed invisible: the link read
+   * as ordinary navigation, and the page behind it had no gate at all.
+   */
+  const session = readCreatorSession((await cookies()).get(CREATOR_SESSION_COOKIE)?.value);
 
   return (
     <main>
@@ -50,9 +60,11 @@ export default async function HomePage() {
                 <Link className="button primary" href={`/w/${creator.publicSlug}`}>
                   View wishlist
                 </Link>
-                <Link className="small muted link-tap" href={`/creator/${creator.publicSlug}`}>
-                  manage
-                </Link>
+                {session?.creatorId === creator.id ? (
+                  <Link className="small muted link-tap" href={`/creator/${creator.publicSlug}`}>
+                    manage
+                  </Link>
+                ) : null}
               </div>
             </div>
           ))}
