@@ -24,9 +24,17 @@ function field(form: FormData, name: string): string {
   return String(form.get(name) ?? '').trim();
 }
 
-/** Send the fan to the wishlist with a readable reason. */
+/**
+ * Send the fan to the wishlist with a readable reason.
+ *
+ * With no slug there is no wishlist to return to, and `/w/` is a **404** — so an
+ * error path ended on a broken page carrying a message about an order with no
+ * page around it. Fall back to the creator index, which always resolves. The note
+ * is dropped there, which is the right trade for not showing a 404.
+ */
 function backToWishlist(slug: string, code: string): never {
-  redirect(`/w/${encodeURIComponent(slug)}?note=${encodeURIComponent(code)}`);
+  const target = slug === '' ? '/' : `/w/${encodeURIComponent(slug)}`;
+  redirect(`${target}?note=${encodeURIComponent(code)}`);
 }
 
 /**
