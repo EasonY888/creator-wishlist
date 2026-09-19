@@ -363,7 +363,19 @@ export class StripePaymentProvider implements PaymentPort {
         };
       }
 
-      if (intent.amount !== input.amountMinor) {
+      // Capturing LESS than was authorised is the normal path, not an error.
+      //
+      // On a tax-added market the fan authorises a ceiling and must be charged
+      // the merchant's actual figure -- the whole product is that refusal to
+      // keep the difference. Comparing with `!==` treated that ordinary outcome
+      // as a violation, so every live card payment whose merchant charged less
+      // than the ceiling was refused at capture and sat in `processing` forever
+      // with `amount_mismatch` and `retryable: false`. Stripe releases the
+      // uncaptured remainder on its own.
+      //
+      // Capturing MORE is the thing that must never happen: it is the fan being
+      // charged above what they approved.
+      if (input.amountMinor > intent.amount) {
         return {
           state: 'failed',
           code: 'amount_mismatch',
@@ -383,7 +395,11 @@ export class StripePaymentProvider implements PaymentPort {
 
       const captured = await this.stripe.paymentIntents.capture(
         reference.reference,
-        {},
+        // Omitted when it matches, so the common full-capture case sends no
+        // amount at all rather than restating it.
+        input.amountMinor === intent.amount
+          ? {}
+          : { amount_to_capture: input.amountMinor },
         { idempotencyKey: input.idempotencyKey },
       );
 
