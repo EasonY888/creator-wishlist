@@ -62,6 +62,18 @@ const DEFAULT_BASE_URL = 'https://api.agnic.ai/api/autofill';
 
 export class AgnicHttpClient implements AgnicPort {
   private readonly baseUrl: string;
+
+  /**
+   * The provider's API root -- the parent of the `/autofill` namespace.
+   *
+   * Not every route lives under `/autofill`. The approval endpoint is at
+   * `/api/approvals/{token}`, and asking for it under the autofill prefix returns
+   * Express's HTML 404 (`Cannot GET /api/autofill/approvals/...`). The defensive
+   * JSON parse below turns that into `non_json_response`, which reads as a
+   * transient network fault -- so the worker retried it forever while the order
+   * sat in `approval_required` with nothing on screen saying why.
+   */
+  private readonly apiRoot: string;
   private readonly token: string;
   private readonly fetchImpl: typeof fetch;
 
@@ -76,6 +88,9 @@ export class AgnicHttpClient implements AgnicPort {
     }
     this.token = options.token;
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    // Strip the namespace by name, not by counting characters, so a supplied base
+    // URL (a staging host, a test double) still resolves to its own root.
+    this.apiRoot = this.baseUrl.replace(/\/autofill$/, '');
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
@@ -94,9 +109,9 @@ export class AgnicHttpClient implements AgnicPort {
    */
   private async request<T extends object>(
     path: string,
-    init?: { method?: string; body?: unknown },
+    init?: { method?: string; body?: unknown; base?: string },
   ): Promise<{ httpStatus: number; data: T & ErrorBody }> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+    const response = await this.fetchImpl(`${init?.base ?? this.baseUrl}${path}`, {
       method: init?.method ?? 'GET',
       headers: {
         'X-Agnic-Token': this.token,
@@ -445,6 +460,7 @@ export class AgnicHttpClient implements AgnicPort {
     try {
       response = await this.request<ApprovalResponse>(
         `/approvals/${encodeURIComponent(token)}`,
+        { base: this.apiRoot },
       );
     } catch (cause) {
       return { state: 'transport_error', code: 'request_failed', detail: String(cause) };

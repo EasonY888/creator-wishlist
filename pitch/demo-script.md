@@ -160,24 +160,41 @@ Add, in this order — each is ~40s:
 
 ## 4b. The fallback recording — make it today, not on the day
 
-The live dispatch takes 60–70 seconds and depends on the network between here and Agnic. It is
-the one part of the demo you cannot control, so it gets a recording. Record it **now**, while
-you are still assembling demo data — not the morning of.
+The live dispatch depends on the network between here and Agnic **and** on a manual step-up at the
+shop. It is the one part of the demo you cannot control, so it gets a recording. Record it **now**,
+while you are still assembling demo data — not the morning of.
 
-```
-npx tsx scripts/live-order.ts --slug=rehearsal-creator --reset
-```
+**Do not use `scripts/live-order.ts` for this.** It no longer runs under `PAYMENTS_MODE=stripe`: it
+passes `paymentMethodRef: 'pm_test'`, which was only ever valid when the fan rail was the
+in-memory double, so it dies at the payment step with `payment_failed` and never reaches the
+merchant. Record the real thing instead — the journey §2 already walks:
 
-**Use `--slug=`.** Run as `live-creator` this deletes the real settled order that `/ops/evidence`
-reads — and that order *is* the money moment. The script now refuses to do that unless you pass
-`--reset`, but a scratch creator is the cleaner path. `cleanup.ts` sweeps `rehearsal-` afterwards.
+1. **Tab A, signed in as a fan.** "Send this gift" on `/w/demo-creator`, pick a delivery option,
+   approve the ceiling, pay with the Stripe test card.
+2. **Watch for the step-up.** This shop answers a dispatch with `cvv_refresh_required`, which means
+   the **platform's** card needs refreshing before it will finish — not the fan's.
 
-Capture, in one continuous take of about 90 seconds:
+   ```
+   npx tsx scripts/pending-approval.ts
+   ```
 
-1. The command's own output — the live quote, `amount_is_final`, the dispatch, and the
-   `--- result ---` block with the provider order id, the provider status and the ledger.
-2. The `/ops` queue in a second window: the row appearing, going `processing → succeeded`.
-3. Nothing else. No window switching, no hunting for a cursor.
+   That prints the URL and a countdown. The window is about five minutes.
+3. Complete it. The worker is polling, so the order resumes by itself.
+4. Record wishlist → `succeeded`.
+
+**If you miss the window, nothing is lost** — the order fails and the fan's hold is released. That
+is the product working correctly, but it is not a beat you want twice.
+
+Ninety seconds of real product beats a terminal, and it is the material that matches what §2 says.
+
+Capture, in one continuous take:
+
+1. **Wishlist to paid.** `/w/demo-creator` → "Send this gift" → delivery choice → the ceiling on
+   screen with "This is a maximum, not an exact total." → the card step → paid.
+2. **The step-up, completed.** The `pending-approval.ts` output with the URL, then the shop's page.
+   Do not cut it — the manual part is the part a judge should see is real.
+3. **The order settling.** Flip to `/ops` and let the row go `processing → succeeded`.
+4. Nothing else. No window switching, no hunting for a cursor.
 
 Save it as `pitch/fallback-dispatch.mp4`. While it plays, say this — it matters:
 
@@ -187,12 +204,15 @@ Save it as `pitch/fallback-dispatch.mp4`. While it plays, say this — it matter
 Saying it is worth more than being caught by it. Then return to Tab B, which is entirely local
 and does not care whether the network exists.
 
-Then sweep the scratch creator:
+Then sweep what the run left behind:
 
 ```
-npx tsx scripts/cleanup.ts --dry-run     <- rehearsal-creator should be the only addition
+npx tsx scripts/cleanup.ts --dry-run     <- confirm it names only scratch creators
 npx tsx scripts/cleanup.ts
 ```
+
+**That also deletes the card-step order** — `cleanup.ts` treats `card-step-demo` as debris. So
+re-run §5's park commands before you present. This is why §5 lists them.
 
 ---
 
