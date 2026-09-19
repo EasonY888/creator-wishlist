@@ -141,7 +141,12 @@ export default async function EvidencePage() {
   const settledOrders = await prisma.fanOrder.findMany({
     where: { state: 'succeeded' },
     orderBy: { createdAt: 'desc' },
-    take: 10,
+    // A window, not a single row, because the specimen is chosen by property
+    // below. The window therefore has to stay comfortably wider than the number
+    // of settled orders: if the one showing the bug slips outside it, the section
+    // silently renders its empty state with no error anywhere. Fifty is far past
+    // anything a demo produces, and placing more orders is otherwise harmless.
+    take: 50,
     include: {
       merchantOrder: true,
       paymentEvents: { orderBy: { createdAt: 'asc' } },
