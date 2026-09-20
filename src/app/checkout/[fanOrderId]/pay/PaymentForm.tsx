@@ -51,7 +51,11 @@ export default function PaymentForm({
   return (
     <Elements
       stripe={getStripe(publishableKey)}
-      options={{ clientSecret, appearance: { theme: 'stripe' } }}
+      // Pin the locale. Stripe defaults to `auto`, which follows the browser --
+      // so a zh-CN browser renders the whole card form in Chinese, right down to
+      // the card-number and CVC labels. That is Stripe working correctly and it
+      // still reads as a broken form to anyone watching in English.
+      options={{ clientSecret, locale: 'en', appearance: { theme: 'stripe' } }}
     >
       <CardForm fanOrderId={fanOrderId} amountLabel={amountLabel} />
     </Elements>
