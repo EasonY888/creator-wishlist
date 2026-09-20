@@ -1,6 +1,6 @@
 # Creator Wishlist
 
-**A creator wishlist where fans send real gifts — and the creator's home address never reaches the fan.**
+**A creator wishlist where fans send gifts without receiving the creator's home address.**
 
 Built for **Agentic Commerce Pioneers, Edition II** — [Track 01, Agentic Checkout](https://pioneers.agnic.ai/build/agentic-checkout).
 
@@ -12,17 +12,17 @@ A fan picks a gift from a creator's wishlist, approves a maximum, and pays. A ba
 
 > **The creator's home address never reaches the fan.**
 
-It is enforced in three places, not stated in one:
+The implementation enforces that promise in three places:
 
-- the address is **encrypted at rest**, field by field (`v1.<key id>.<ciphertext>` in the database — readable back only through an audited, role-gated path);
-- the fan-facing view is built by a projection that **asserts no sensitive field is present** before returning, so a leak throws rather than rendering;
+- the address is **encrypted at rest**, field by field (`v1.<key id>.<ciphertext>` in the database — readable only through an audited, role-gated path);
+- the fan-facing view uses a projection that **asserts no sensitive field is present** before returning, so a leak fails closed rather than rendering;
 - the approved request is **digest-bound**, so a changed destination cannot be dispatched.
 
 ---
 
 ## Who builds what
 
-The track splits the work, and this repo matches that split exactly.
+The project divides responsibility between the application and Agnic as follows.
 
 | This build owns | Agnic owns |
 | --- | --- |
@@ -39,13 +39,13 @@ The track splits the work, and this repo matches that split exactly.
 ```
 fan picks a gift
   → Agnic quotes it (item + delivery + estimated tax)
-  → the fan approves a CEILING and pays into a hold
+  → the fan approves a maximum and authorizes payment
   → a worker dispatches the order to the shop
   → the shop settles and reports what it actually charged
-  → we capture THAT plus the fee shown, never the ceiling
+  → we partially capture that amount plus the displayed fee, never the full ceiling
 ```
 
-The interesting part is the last two lines. On a tax-added market the final total isn't knowable in advance, so the fan approves a **maximum**. When the shop settles for less — which it usually does — the fan pays the real cost plus the displayed fee, and the difference is released.
+On tax-added markets, the final total is not always known in advance, so the fan approves a **maximum**. When the merchant settles for less, the system partially captures the merchant's actual charge plus the displayed fee; the unused portion of the authorization is released.
 
 ### The one rule
 
@@ -53,16 +53,16 @@ The interesting part is the last two lines. On a tax-added market the final tota
 amount = merchant's real charge + the fee the fan was shown
 
 if (amount > what the fan approved)  → block and route to a person
-otherwise                            → charge exactly that
+otherwise                            → capture exactly that
 ```
 
-`src/domain/charge.ts` is the single implementation, called by **both** the worker and the human operator path, so the two can never disagree about what to charge.
+`src/domain/charge.ts` is the single implementation used by both the worker and the operator path, preventing the two paths from applying different charge rules.
 
 ---
 
 ## Design decisions worth knowing
 
-**No LLM in the spend path.** The "agent" is the dispatch worker. An LLM near a money decision is an unbounded-spend bug rather than a feature; a model belongs in curation (understanding *what* to buy), nowhere near *how much* to move.
+**No LLM in the spend path.** The dispatch worker is the agent. Models may assist curation (understanding *what* to buy), but they do not decide how much money to move.
 
 **Exactly-once dispatch.** `src/orders/dispatcher.ts` is the only code path that spends money. It verifies the request still matches what was approved, writes a durable claim **before** the network call, calls once, then records the result. If a worker dies mid-call, the claim on disk stops a replacement from calling again.
 
@@ -76,7 +76,7 @@ otherwise                            → charge exactly that
 
 ## The proof
 
-A real order, settled end to end:
+A sandbox order, exercised end to end:
 
 ```
 merchant order    af_ord_mu8yhh4hhi7zo6az        succeeded
@@ -88,7 +88,7 @@ fan charged       1599      1300 + the 299 fee shown
 released           195      back to the fan, by Stripe
 ```
 
-`/ops/evidence` renders this from the same tables the product writes — nothing on that page is typed in. It also shows the counter-example: an earlier order where the code captured the whole ceiling, kept 4.94 having shown 2.99, and has since been fixed.
+`/ops/evidence` renders this from the same tables the product writes — nothing on that page is manually entered. It also includes a regression example: an earlier order captured the full ceiling and retained 4.94 after displaying a 2.99 fee. The current charge rule fixes that behaviour.
 
 ---
 
@@ -106,9 +106,10 @@ docker run --name creator-wishlist-db \
 npm install
 npx prisma db push
 
-# 3. environment (see the table below), then:
-npm run dev      # http://localhost:3000
-npm run worker   # a SEPARATE process — nothing dispatches without it
+# 3. configure the environment, then:
+cp .env.example .env   # PowerShell: Copy-Item .env.example .env
+npm run dev           # http://localhost:3000
+npm run worker   # Run in a separate terminal; nothing dispatches without it.
 ```
 
 ### Environment
@@ -135,7 +136,7 @@ npx tsx scripts/sync-shop-items.ts      # sync a shop's items onto a wishlist, m
 npx tsx scripts/creator-link.ts         # print a creator's private manage link
 npx tsx scripts/fan-login-code.ts you@example.com
 npx tsx scripts/live-card-step.ts       # park an order at the card step
-npx tsx scripts/park-ceiling-order.ts   # park the ceiling beat
+npx tsx scripts/park-ceiling-order.ts   # create a demonstration ceiling order
 npx tsx scripts/demo-cap-refusal.ts     # the controlled spending-cap refusal
 npx tsx scripts/pending-approval.ts     # show any step-up the shop is waiting on
 ```
@@ -144,7 +145,7 @@ npx tsx scripts/pending-approval.ts     # show any step-up the shop is waiting o
 
 ```bash
 npm run typecheck   # app, then scripts
-npm test            # 202 tests
+npm test            # full Vitest suite
 npx tsx scripts/preflight.ts
 ```
 
@@ -152,12 +153,12 @@ npx tsx scripts/preflight.ts
 
 ## What is real, and what is not
 
-Stated plainly, because it matters more than a green checkmark.
+The demo uses real integrations where noted, but it does not move real money.
 
 **Real**
 
-- The merchant checkout: a live Shopify shop, driven through Agnic's sandbox. The settlement above is a real `af_ord_…` record.
-- The fan payment: real Stripe PaymentIntents, authorised and then captured for a **different, smaller** amount.
+- The merchant checkout: a Shopify sandbox shop, driven through Agnic. The settlement above is a real sandbox `af_ord_…` record.
+- The fan payment: Stripe test-mode PaymentIntents, authorized and then partially captured for a **different, smaller** amount.
 - Address encryption, the digest binding, the dispatch claim, the order lifecycle.
 
 **Not real, or limited**
