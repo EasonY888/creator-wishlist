@@ -67,14 +67,33 @@ if (paymentsMode !== 'stripe') {
 const stale = await prisma.creator.findUnique({ where: { publicSlug: SLUG } });
 
 if (stale) {
-  // Order matters: the address is referenced by orders, so it goes last-ish
-  // along with the creator.
-  await prisma.outboxEvent.deleteMany({});
+  // Read this creator's orders FIRST, so the outbox rows can be scoped to them.
   const orders = await prisma.fanOrder.findMany({
     where: { creatorId: stale.id },
     select: { id: true },
   });
   const ids = orders.map((o) => o.id);
+
+  // Scoped on purpose, and the guard is not decoration.
+  //
+  // This line used to be `deleteMany({})` with no filter, which wipes the queue
+  // for EVERY order in the database rather than just this scratch creator's.
+  // `OutboxEvent` has no order column, so the id has to come out of the jsonb
+  // payload. One pending job is all it takes to strand an order mid-approval,
+  // and `demo-script.md` tells you to run this script during pre-flight -- when
+  // exactly that work is in flight. The `ids.length` guard also matters:
+  // Prisma renders an empty `OR: []` as no condition at all, which would put us
+  // straight back to deleting everything.
+  if (ids.length > 0) {
+    await prisma.outboxEvent.deleteMany({
+      where: {
+        OR: ids.map((id) => ({ payload: { path: ['fanOrderId'], equals: id } })),
+      },
+    });
+  }
+
+  // Order matters: the address is referenced by orders, so it goes last-ish
+  // along with the creator.
   await prisma.paymentEvent.deleteMany({ where: { fanOrderId: { in: ids } } });
   await prisma.orderEvent.deleteMany({ where: { fanOrderId: { in: ids } } });
   await prisma.approvalWindow.deleteMany({ where: { fanOrderId: { in: ids } } });
