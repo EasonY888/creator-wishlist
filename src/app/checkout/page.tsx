@@ -124,7 +124,7 @@ export default async function ChooseDeliveryPage({
         <>
           <div className="notice notice-warn">
             {priced.state === 'unfulfillable'
-              ? 'This shop cannot deliver to the creator at the moment.'
+              ? 'This gift cannot be delivered to the creator \u2014 try another one.'
               : priced.state === 'missing_address'
                 ? 'The creator has not saved a delivery address yet.'
                 : `We could not price this item (${priced.state}).`}

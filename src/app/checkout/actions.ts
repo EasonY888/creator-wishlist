@@ -84,7 +84,12 @@ export async function startCheckout(form: FormData): Promise<void> {
       );
 
     case 'unfulfillable':
-      backToWishlist(slug, 'This shop cannot deliver to the creator right now.');
+      // Per ITEM, not per shop and not per address. Verified against the sandbox:
+      // one destination, one wishlist, where some items quote two delivery options
+      // and others return none at all -- and the provider's own reason for the
+      // latter is `no_local_fulfilment` on the variant. Naming the shop sent
+      // whoever read it hunting for a delivery problem that did not exist.
+      backToWishlist(slug, 'This gift cannot be delivered to the creator \u2014 try another item.');
 
     case 'missing_address':
       backToWishlist(slug, 'The creator has not saved a delivery address yet.');
