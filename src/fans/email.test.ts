@@ -4,6 +4,7 @@ import {
   EmailDeliveryError,
   emailConfigured,
   loginCodeEmail,
+  loginCodeShownOnScreen,
   sendLoginCode,
 } from './email';
 
@@ -36,6 +37,7 @@ beforeEach(() => {
   setEnv('RESEND_API_KEY', undefined);
   setEnv('EMAIL_FROM', undefined);
   setEnv('NODE_ENV', undefined);
+  setEnv('DEMO_LOGIN_CODES', undefined);
   vi.unstubAllGlobals();
 });
 
@@ -81,7 +83,7 @@ describe('the message', () => {
 describe('with no provider configured', () => {
   it('logs the code in development rather than throwing, so the flow can be finished', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    await expect(sendLoginCode(MESSAGE)).resolves.toBeUndefined();
+    await expect(sendLoginCode(MESSAGE)).resolves.toBe('log');
     expect(log).toHaveBeenCalledTimes(1);
     expect(String(log.mock.calls[0]?.[0])).toContain('123456');
   });
@@ -93,6 +95,37 @@ describe('with no provider configured', () => {
     await expect(sendLoginCode(MESSAGE)).rejects.toBeInstanceOf(EmailDeliveryError);
     // The important half: it refused AND it did not leak the code on the way out.
     expect(log).not.toHaveBeenCalled();
+  });
+});
+
+describe('demo mode', () => {
+  it('is off unless the deployment opts in', () => {
+    expect(loginCodeShownOnScreen()).toBe(false);
+  });
+
+  it('does not switch itself on for an unset or unexpected value', () => {
+    setEnv('DEMO_LOGIN_CODES', 'true');
+    expect(loginCodeShownOnScreen()).toBe(false);
+  });
+
+  it('hands the code back in production when the deployment opts in', async () => {
+    setEnv('NODE_ENV', 'production');
+    setEnv('DEMO_LOGIN_CODES', 'show');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+
+    await expect(sendLoginCode(MESSAGE)).resolves.toBe('screen');
+    expect(loginCodeShownOnScreen()).toBe(true);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it('is refused the moment a provider is configured, however the flag is set', () => {
+    // The half that matters. A deployment with a working mailbox must never have
+    // its codes painted onto a page, so the flag cannot override a real channel.
+    setEnv('DEMO_LOGIN_CODES', 'show');
+    process.env.RESEND_API_KEY = 're_test';
+    process.env.EMAIL_FROM = 'gifts@example.test';
+
+    expect(loginCodeShownOnScreen()).toBe(false);
   });
 });
 

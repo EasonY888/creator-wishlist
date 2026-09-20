@@ -17,9 +17,15 @@ export const dynamic = 'force-dynamic';
 export default async function FanLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; email?: string; sent?: string; problem?: string }>;
+  searchParams: Promise<{
+    next?: string;
+    email?: string;
+    sent?: string;
+    problem?: string;
+    demoCode?: string;
+  }>;
 }) {
-  const { next, email, sent, problem } = await searchParams;
+  const { next, email, sent, problem, demoCode } = await searchParams;
   const destination = next ?? '/';
   const awaitingCode = sent === '1' && Boolean(email);
 
@@ -34,10 +40,17 @@ export default async function FanLoginPage({
 
         <p className="muted">
           {awaitingCode ? (
-            <>
-              We sent a six-digit code to <strong>{email}</strong>. It expires in ten
-              minutes.
-            </>
+            demoCode ? (
+              <>
+                A six-digit code was issued for <strong>{email}</strong>. It expires in
+                ten minutes.
+              </>
+            ) : (
+              <>
+                We sent a six-digit code to <strong>{email}</strong>. It expires in ten
+                minutes.
+              </>
+            )
           ) : (
             <>
               Fans pay without an account, so we confirm your email instead. Without
@@ -47,6 +60,21 @@ export default async function FanLoginPage({
           )}
         </p>
       </div>
+
+      {/*
+        Shown only when the deployment opted in AND has no mail provider. The copy
+        says which of the two it is doing, because "we sent you an email" when no
+        email was sent is the kind of small lie that makes a reviewer distrust
+        everything else on the page.
+      */}
+      {demoCode ? (
+        <div className="notice notice-info" style={{ marginBottom: '1.5rem' }}>
+          <strong>Demo instance: the code is shown here rather than emailed.</strong>{' '}
+          This deployment has no mail provider configured, so the code is displayed
+          instead of sent. Yours is <strong>{demoCode}</strong>, already filled in
+          below.
+        </div>
+      ) : null}
 
       {problem ? (
         <div className="notice notice-warn" style={{ marginBottom: '1.5rem' }}>
@@ -70,6 +98,7 @@ export default async function FanLoginPage({
                 pattern="[0-9]{6}"
                 maxLength={6}
                 placeholder="000000"
+                defaultValue={demoCode}
                 required
                 autoFocus
               />

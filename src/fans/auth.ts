@@ -21,7 +21,7 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
 import type { Db } from '../db/types';
-import { sendLoginCode } from './email';
+import { sendLoginCode, type LoginCodeChannel } from './email';
 
 export const SESSION_COOKIE = 'fan_session';
 
@@ -111,17 +111,32 @@ function safeEqual(a: string, b: string): boolean {
  * Kept as a named export with this signature so `requestLoginCode`'s `send` seam
  * is unchanged -- that is what let the stubbed version and the real one be
  * swapped without touching the flow.
+ *
+ * It reports back where the code went. `requestLoginCode` needs that to know
+ * whether the caller is allowed to show it, and the answer has to come from the
+ * thing that actually delivered it rather than from a second reading of the
+ * environment.
  */
 export async function deliver(args: {
   email: string;
   code: string;
   expiresAt: Date;
-}): Promise<void> {
-  await sendLoginCode(args);
+}): Promise<LoginCodeChannel | void> {
+  return sendLoginCode(args);
 }
 
 export type RequestCodeOutcome =
-  | { state: 'sent'; email: string; expiresAt: Date }
+  | {
+      state: 'sent';
+      email: string;
+      expiresAt: Date;
+      /**
+       * Present only on a demo instance that has opted into showing codes on
+       * screen. Never set when a provider is configured -- see
+       * `loginCodeShownOnScreen`.
+       */
+      demoCode?: string;
+    }
   | { state: 'invalid_email'; reason: string };
 
 /**
@@ -160,9 +175,16 @@ export async function requestLoginCode(
     });
   });
 
-  await (options.send ?? deliver)({ email, code, expiresAt });
+  const channel = await (options.send ?? deliver)({ email, code, expiresAt });
 
-  return { state: 'sent', email, expiresAt };
+  // The channel decides, not the environment. An injected `send` returns nothing,
+  // so the code is only handed back when the real delivery said it went on screen.
+  return {
+    state: 'sent',
+    email,
+    expiresAt,
+    ...(channel === 'screen' ? { demoCode: code } : {}),
+  };
 }
 
 export type VerifyOutcome =

@@ -6,7 +6,7 @@
  * while removing the property it should never have had, which is logging a
  * credential.
  *
- * Two rules, both about failing in the right direction:
+ * Three rules, all about failing in the right direction:
  *
  *   1. **If a provider is configured, a failure throws.** A code that quietly
  *      fails to send is worse than an error, because the fan sits waiting for an
@@ -16,6 +16,13 @@
  *      refused in production.** Printing a valid login code to stdout in
  *      production hands an account to anyone who can read a log line. A demo
  *      needs to finish a login; a deployment must not.
+ *   3. **Unless the deployment has explicitly opted in as a demo.** A public
+ *      demo with no mailbox cannot sign anyone in at all, which makes the entire
+ *      fan journey — and therefore the whole product — unreachable to the person
+ *      reviewing it. So `DEMO_LOGIN_CODES=show` hands the code back to the caller
+ *      to be displayed, and says so on screen. Opt-in, never a default, and
+ *      refused the moment a provider is configured: a control that switches
+ *      itself on is precisely what rule 2 exists to prevent.
  */
 
 export interface LoginCodeMessage {
@@ -46,6 +53,18 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
+/**
+ * Whether the login code may be rendered into the page.
+ *
+ * Requires BOTH that the deployment opted in and that no provider is configured.
+ * The second half is the load-bearing one: a deployment with a working mailbox
+ * must never have its codes painted onto a screen, so no stray variable can turn
+ * a private email into a public broadcast.
+ */
+export function loginCodeShownOnScreen(): boolean {
+  return process.env.DEMO_LOGIN_CODES === 'show' && !emailConfigured();
+}
+
 function minutesUntil(expiresAt: Date, now = Date.now()): number {
   return Math.max(1, Math.round((expiresAt.getTime() - now) / 60_000));
 }
@@ -73,22 +92,38 @@ export function loginCodeEmail(args: LoginCodeMessage): {
   };
 }
 
-export async function sendLoginCode(args: LoginCodeMessage): Promise<void> {
+/** Where a code actually went. The caller needs this to know whether to show it. */
+export type LoginCodeChannel = 'email' | 'log' | 'screen';
+
+export async function sendLoginCode(args: LoginCodeMessage): Promise<LoginCodeChannel> {
   if (!emailConfigured()) {
+    const { subject } = loginCodeEmail(args);
+
+    if (loginCodeShownOnScreen()) {
+      // Demo mode: logged and handed back, so the login page can display it. This
+      // is what makes a deployed instance with no mailbox reviewable by someone
+      // who is not us.
+      console.log(
+        `\n[fan login] ${subject}  ->  ${args.email}\n` +
+          `            ^ shown on screen as well: DEMO_LOGIN_CODES is set.\n`,
+      );
+      return 'screen';
+    }
+
     if (isProduction()) {
       throw new EmailDeliveryError(
-        'Refusing to log a login code in production. Set RESEND_API_KEY and EMAIL_FROM.',
+        'Refusing to log a login code in production. Set RESEND_API_KEY and EMAIL_FROM, ' +
+          'or set DEMO_LOGIN_CODES=show if this instance is a public demo.',
       );
     }
 
-    // Development and demo: the code is the whole point of being able to finish
-    // the flow without a mailbox.
-    const { subject } = loginCodeEmail(args);
+    // Development: the code is the whole point of being able to finish the flow
+    // without a mailbox.
     console.log(
       `\n[fan login] ${subject}  ->  ${args.email} (expires ${args.expiresAt.toISOString()})\n` +
         `            ^ printed because no email provider is configured.\n`,
     );
-    return;
+    return 'log';
   }
 
   const { subject, text } = loginCodeEmail(args);
@@ -123,4 +158,6 @@ export async function sendLoginCode(args: LoginCodeMessage): Promise<void> {
       `The email provider refused the message (HTTP ${response.status}).`,
     );
   }
+
+  return 'email';
 }

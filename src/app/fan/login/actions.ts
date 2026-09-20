@@ -33,11 +33,23 @@ function safeNext(raw: string): string {
   return raw;
 }
 
-function loginUrl(args: { next: string; email?: string; sent?: boolean; problem?: string }): string {
+function loginUrl(args: {
+  next: string;
+  email?: string;
+  sent?: boolean;
+  problem?: string;
+  demoCode?: string;
+}): string {
   const params = new URLSearchParams({ next: safeNext(args.next) });
   if (args.email) params.set('email', args.email);
   if (args.sent) params.set('sent', '1');
   if (args.problem) params.set('problem', args.problem);
+  // Only ever present on a demo instance that has opted in. It rides in the URL
+  // because that is how the two-step form already carries state, and it is the
+  // code the caller just asked to be sent to their own address -- but it is
+  // still a credential in a URL bar, which is why the flag that enables it
+  // refuses to work alongside a real mail provider.
+  if (args.demoCode) params.set('demoCode', args.demoCode);
   return `/fan/login?${params.toString()}`;
 }
 
@@ -50,7 +62,14 @@ export async function requestCode(form: FormData): Promise<void> {
   if (result.state === 'sent') {
     // The address is echoed back so the code form does not make the fan retype it
     // -- the code itself is what proves they own it.
-    redirect(loginUrl({ next, email: result.email, sent: true }));
+    redirect(
+      loginUrl({
+        next,
+        email: result.email,
+        sent: true,
+        ...(result.demoCode === undefined ? {} : { demoCode: result.demoCode }),
+      }),
+    );
   }
 
   redirect(loginUrl({ next, problem: result.reason }));
