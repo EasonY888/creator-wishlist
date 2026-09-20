@@ -280,3 +280,74 @@ describe('what the queue calls paid', () => {
     });
   }
 });
+
+describe("the provider's own account", () => {
+  /**
+   * The only part of the record that is not ours. It was written to a jsonb
+   * column at dispatch and read by nothing, so the strongest evidence the
+   * product holds -- the shop's own total, and a screenshot run that ends after
+   * the order is submitted -- was invisible on every screen.
+   */
+  function withEvidence(evidence: unknown) {
+    return operatorOrderView({
+      orderId: 'ord_evidence',
+      fanId: 'fan_live',
+      creator: { id: 'c1', displayName: 'Test Creator', publicSlug: 'test-creator' },
+      state: 'succeeded',
+      fanTotalMinor: 1794,
+      markupMinor: 299,
+      merchantCapMinor: 1495,
+      currency: 'CAD',
+      createdAt: new Date(),
+      merchantOrder: {
+        providerOrderId: 'af_ord_test',
+        statusRaw: 'succeeded',
+        retryable: false,
+        retryAction: 'none',
+        action: null,
+        amountApprovedMinor: 1495,
+        amountChargedMinor: 1300,
+        pollCount: 15,
+        lastPolledAt: null,
+        dispatchClaimedAt: null,
+        dispatchedAt: null,
+        evidence,
+      },
+    });
+  }
+
+  it('reads the settlement facts the provider reported', () => {
+    const view = withEvidence({
+      observed_total_minor: 1300,
+      price_drift_minor: -195,
+      charge_state: 'confirmed',
+      ship_to_verified: true,
+      vgs_request_id: '8fb705cedf84642bdc59613485b03cef',
+      screenshots: [
+        { idx: 0, stage: 'checkout-loaded' },
+        { idx: 3, stage: 'post-submit' },
+      ],
+    });
+
+    expect(view.providerEvidence?.observedTotalMinor).toBe(1300);
+    expect(view.providerEvidence?.priceDriftMinor).toBe(-195);
+    expect(view.providerEvidence?.shipToVerified).toBe(true);
+    expect(view.providerEvidence?.screenshotStages).toEqual(['checkout-loaded', 'post-submit']);
+  });
+
+  it('reads an absent or unrecognisable bundle as nothing at all', () => {
+    // The fake rail writes a different shape, and a provider may rename a key.
+    // Null, rather than a panel headed "provider evidence" with nothing in it --
+    // that reads as proof of absence rather than absence of proof.
+    expect(withEvidence(null).providerEvidence).toBeNull();
+    expect(withEvidence(undefined).providerEvidence).toBeNull();
+    expect(withEvidence({ something: 'else' }).providerEvidence).toBeNull();
+    expect(withEvidence('not an object').providerEvidence).toBeNull();
+  });
+
+  it('keeps only screenshots that name their stage', () => {
+    const view = withEvidence({ screenshots: [{ idx: 0 }, { idx: 1, stage: 'post-submit' }] });
+
+    expect(view.providerEvidence?.screenshotStages).toEqual(['post-submit']);
+  });
+});

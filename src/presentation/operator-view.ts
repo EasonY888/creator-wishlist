@@ -52,6 +52,70 @@ function capturedFrom(ledger: OperatorLedgerEntry[]): number | null {
   return captured.reduce((total, entry) => total + entry.amountMinor, 0);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asText(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/**
+ * What the provider recorded while it placed the order, in its own words.
+ *
+ * Everything else on this view is our own record of our own actions. This is the
+ * part that is not: the shop's own total, whether it charged less than it quoted,
+ * whether the delivery address survived the shop's checkout form, the vault's
+ * request id, and a staged set of screenshots the provider took of that checkout
+ * — ending at `post-submit`.
+ *
+ * It matters because it is the difference between "we say the order was placed"
+ * and "here is the receipt from the party that placed it". It sat in a jsonb
+ * column, written at dispatch and read by nothing, which made the strongest
+ * evidence in the product invisible.
+ *
+ * Parsed defensively: the field is `unknown` because the fake rail writes a
+ * different shape, and an operator screen must not fail because a payment
+ * provider changed a key.
+ */
+function providerEvidenceFrom(raw: unknown): OperatorOrderView['providerEvidence'] {
+  const evidence = asRecord(raw);
+  if (evidence === null) return null;
+
+  const screenshots = Array.isArray(evidence.screenshots) ? evidence.screenshots : [];
+  const screenshotStages = screenshots
+    .map((shot) => asText(asRecord(shot)?.stage))
+    .filter((stage): stage is string => stage !== null);
+
+  const facts = {
+    observedTotalMinor: asNumber(evidence.observed_total_minor),
+    priceDriftMinor: asNumber(evidence.price_drift_minor),
+    chargeState: asText(evidence.charge_state),
+    shipToVerified:
+      typeof evidence.ship_to_verified === 'boolean' ? evidence.ship_to_verified : null,
+    stockStatus: asText(evidence.stock_status),
+    billingMode: asText(evidence.billing_mode),
+    vgsRequestId: asText(evidence.vgs_request_id),
+    screenshotStages,
+  };
+
+  // Nothing recognisable means nothing to show. An empty panel headed "provider
+  // evidence" would read as proof of absence rather than absence of proof.
+  const hasAnything =
+    screenshotStages.length > 0 ||
+    facts.observedTotalMinor !== null ||
+    facts.chargeState !== null ||
+    facts.shipToVerified !== null ||
+    facts.vgsRequestId !== null;
+
+  return hasAnything ? facts : null;
+}
+
 export interface OperatorOrderView {
   orderId: string;
   fanId: string;
@@ -95,6 +159,24 @@ export interface OperatorOrderView {
     chargedMinor: number | null;
     ledger: OperatorLedgerEntry[];
   };
+
+  /**
+   * The provider's own account of placing the order.
+   *
+   * OPERATOR ONLY, and null when the rail is the fake or the provider said
+   * nothing recognisable. The screenshot stages are names, not images: the
+   * images themselves carry the delivery address on the shop's checkout page.
+   */
+  providerEvidence: {
+    observedTotalMinor: number | null;
+    priceDriftMinor: number | null;
+    chargeState: string | null;
+    shipToVerified: boolean | null;
+    stockStatus: string | null;
+    billingMode: string | null;
+    vgsRequestId: string | null;
+    screenshotStages: string[];
+  } | null;
 
   approval: {
     merchantId: string;
@@ -282,6 +364,8 @@ export function operatorOrderView(
       chargedMinor: input.merchantOrder?.amountChargedMinor ?? null,
       ledger: input.ledger ?? [],
     },
+
+    providerEvidence: providerEvidenceFrom(input.merchantOrder?.evidence),
 
     approval:
       input.approvedRequest === undefined || input.approvedRequest === null

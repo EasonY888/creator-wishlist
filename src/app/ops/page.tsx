@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { prisma } from '@/db/client';
 import { toProviderOrder } from '@/agnic/port';
@@ -23,6 +24,54 @@ const REFUNDABLE_STATES = new Set<string>(['succeeded', 'partially_fulfilled', '
  * operator's to call.
  */
 const RESOLVABLE_STATES = new Set<string>(['processing', 'uncertain']);
+
+/**
+ * The provider's own account of placing the order.
+ *
+ * Everything else on this page is our record of our own actions. This is the
+ * only part that is not — the shop's own total, whether it charged less than it
+ * quoted, whether the delivery address survived the shop's checkout form, and
+ * the stages of a screenshot run the provider made of that checkout. It is the
+ * difference between "we say the order was placed" and "here is the account of
+ * the party that placed it".
+ *
+ * Stages only, never the images: the frames show the shop's checkout with the
+ * delivery address on it, which is why the whole bundle is operator-only.
+ */
+function providerAccount(view: OperatorOrderView): string | null {
+  const evidence = view.providerEvidence;
+  if (evidence === null) return null;
+
+  const parts: string[] = [];
+
+  if (evidence.observedTotalMinor !== null) {
+    parts.push(`shop's own total ${formatMoney(evidence.observedTotalMinor, view.money.currency)}`);
+  }
+
+  if (evidence.priceDriftMinor !== null && evidence.priceDriftMinor !== 0) {
+    // Signed explicitly: "1.95 under" and "1.95 over" are opposite facts and the
+    // whole product turns on which one happened.
+    const direction = evidence.priceDriftMinor < 0 ? 'under' : 'over';
+    parts.push(`${formatMoney(Math.abs(evidence.priceDriftMinor), view.money.currency)} ${direction}`);
+  }
+
+  if (evidence.shipToVerified !== null) {
+    parts.push(evidence.shipToVerified ? 'ship-to verified' : 'ship-to NOT verified');
+  }
+
+  if (evidence.chargeState !== null) parts.push(`charge ${evidence.chargeState}`);
+  if (evidence.stockStatus !== null) parts.push(`stock ${evidence.stockStatus}`);
+  if (evidence.billingMode !== null) parts.push(`billing ${evidence.billingMode}`);
+  if (evidence.vgsRequestId !== null) parts.push(`vault ${evidence.vgsRequestId.slice(0, 8)}…`);
+
+  if (evidence.screenshotStages.length > 0) {
+    parts.push(
+      `${evidence.screenshotStages.length} checkout screenshots (${evidence.screenshotStages.join(' → ')})`,
+    );
+  }
+
+  return parts.length === 0 ? null : parts.join(' · ');
+}
 
 /**
  * Whether an order can be refunded, and if not, what is stopping it.
@@ -286,38 +335,51 @@ export default async function OpsPage({
             </tr>
           </thead>
           <tbody>
-            {rest.slice(0, 30).map((view) => (
-              <tr key={view.orderId}>
-                <td>{view.creator.displayName}</td>
-                <td>
-                  <code>{view.state}</code>
-                </td>
-                <td>
-                  <code>{view.provider?.statusRaw ?? '—'}</code>
-                </td>
-                <td className="money" style={{ textAlign: 'right' }}>
-                  {formatMoney(
-                    view.money.capturedMinor ?? view.money.fanTotalMinor,
-                    view.money.currency,
+            {rest.slice(0, 30).map((view) => {
+              const account = providerAccount(view);
+
+              return (
+                <Fragment key={view.orderId}>
+                  <tr>
+                    <td>{view.creator.displayName}</td>
+                    <td>
+                      <code>{view.state}</code>
+                    </td>
+                    <td>
+                      <code>{view.provider?.statusRaw ?? '—'}</code>
+                    </td>
+                    <td className="money" style={{ textAlign: 'right' }}>
+                      {formatMoney(
+                        view.money.capturedMinor ?? view.money.fanTotalMinor,
+                        view.money.currency,
+                      )}
+                      {view.money.capturedMinor === null ? (
+                        <span className="muted small"> held</span>
+                      ) : null}
+                    </td>
+                    <td className="money" style={{ textAlign: 'right' }}>
+                      {formatMoney(
+                        view.money.chargedMinor ?? view.money.merchantCapMinor,
+                        view.money.currency,
+                      )}
+                      {view.money.chargedMinor === null ? (
+                        <span className="muted small"> cap</span>
+                      ) : null}
+                    </td>
+                    <td>
+                      <RefundCell view={view} />
+                    </td>
+                  </tr>
+                  {account === null ? null : (
+                    <tr>
+                      <td colSpan={6} className="muted small" style={{ paddingTop: 0 }}>
+                        <strong>provider:</strong> {account}
+                      </td>
+                    </tr>
                   )}
-                  {view.money.capturedMinor === null ? (
-                    <span className="muted small"> held</span>
-                  ) : null}
-                </td>
-                <td className="money" style={{ textAlign: 'right' }}>
-                  {formatMoney(
-                    view.money.chargedMinor ?? view.money.merchantCapMinor,
-                    view.money.currency,
-                  )}
-                  {view.money.chargedMinor === null ? (
-                    <span className="muted small"> cap</span>
-                  ) : null}
-                </td>
-                <td>
-                  <RefundCell view={view} />
-                </td>
-              </tr>
-            ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}
