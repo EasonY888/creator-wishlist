@@ -29,8 +29,17 @@ import 'dotenv/config';
 
 import { prisma } from '../src/db/client';
 import { createDraftOrder, priceWishlistItem } from '../src/orders/checkout';
-import { writeCreatorAddress } from '../src/fulfillment/address-store';
+import {
+  FULFILLMENT_ACTOR,
+  loadShipToForFulfillment,
+  writeCreatorAddress,
+} from '../src/fulfillment/address-store';
 import { checkoutDeps } from '../src/services';
+import {
+  resolveSandboxItem,
+  SANDBOX_MERCHANT_ID,
+  SANDBOX_MERCHANT_NAME,
+} from './sandbox-item';
 
 /**
  * The creator the fan journey is walked as, so the parked order lands on the
@@ -64,8 +73,8 @@ const PARK_MARKER = 'fan-ceiling-demo';
  */
 const fanArg = process.argv.find((arg) => arg.startsWith('--fan='));
 
-const SANDBOX_MERCHANT_ID = 'merchant_untitled_fidget_shop';
-const SANDBOX_SKU = 'gid://shopify/ProductVariant/43945235349570'; // Hex Token Fidget
+// The merchant id and the item to buy both come from `sandbox-item` — see that
+// file for why this script no longer hardcodes a SKU.
 
 const ADDRESS = {
   fullName: 'Demo Creator',
@@ -128,8 +137,31 @@ if (existingAddress === null) {
   });
 }
 
-let item = await prisma.wishlistItem.findFirst({
-  where: { creatorId: creator.id, merchantId: SANDBOX_MERCHANT_ID },
+const deps = checkoutDeps();
+
+const address = await prisma.creatorAddress.findUniqueOrThrow({
+  where: { creatorId: creator.id },
+});
+
+// Ask the provider which of the shop's items is actually buyable, instead of
+// taking whichever item happens to be first. The Hex Token Fidget sold out on
+// 2026-09-19, and picking it meant this script parked nothing at all.
+const { shipTo } = await loadShipToForFulfillment(prisma, {
+  creatorAddressId: address.id,
+  actor: FULFILLMENT_ACTOR,
+});
+
+const buyable = await resolveSandboxItem(deps.agnic, shipTo);
+console.log(`buying from ${SANDBOX_MERCHANT_NAME}: ${buyable.title}`);
+
+let item = await prisma.wishlistItem.findUnique({
+  where: {
+    creatorId_merchantId_sku: {
+      creatorId: creator.id,
+      merchantId: SANDBOX_MERCHANT_ID,
+      sku: buyable.sku,
+    },
+  },
 });
 
 if (item === null) {
@@ -138,11 +170,11 @@ if (item === null) {
     data: {
       creatorId: creator.id,
       merchantId: SANDBOX_MERCHANT_ID,
-      merchantName: 'untitled-fidget.shop',
-      sku: SANDBOX_SKU,
-      title: 'Hex Token Fidget',
+      merchantName: SANDBOX_MERCHANT_NAME,
+      sku: buyable.sku,
+      title: buyable.title,
       currency: 'CAD',
-      lastPriceMinor: 100,
+      lastPriceMinor: buyable.priceMinor,
       lastCheckedAt: new Date(),
       status: 'active',
     },
@@ -218,8 +250,6 @@ const ownerFanId = await resolveOwnerFanId();
 // ---------------------------------------------------------------------------
 // 3. A real quote, then a draft. Nothing is held.
 // ---------------------------------------------------------------------------
-
-const deps = checkoutDeps();
 
 console.log(`\nquoting ${SLUG} live...`);
 

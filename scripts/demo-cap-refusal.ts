@@ -13,9 +13,7 @@ import 'dotenv/config';
 import { checkSetup, describeSetup } from '../src/agnic/setup-check';
 import { AgnicHttpClient } from '../src/agnic/http';
 import type { Constraints } from '../src/agnic/types';
-
-const SANDBOX_MERCHANT_ID = 'merchant_untitled_fidget_shop';
-const SANDBOX_SKU = 'gid://shopify/ProductVariant/43945235349570'; // 100 minor CAD
+import { resolveSandboxItem, SANDBOX_MERCHANT_ID } from './sandbox-item';
 
 const SHIP_TO = {
   name: 'Test Creator',
@@ -41,6 +39,11 @@ if (!setup.ready) {
 
 const agnic = new AgnicHttpClient({ token });
 
+// Resolve a buyable item rather than trusting a hardcoded SKU. The sandbox shop's
+// stock changes: the Hex Token Fidget sold out on 2026-09-19 and made this script
+// fail at step 1 — before demonstrating the refusal it exists to show.
+const ITEM = await resolveSandboxItem(agnic, SHIP_TO);
+
 function line(label: string, value: unknown): void {
   console.log(`  ${label.padEnd(22)} ${String(value)}`);
 }
@@ -50,10 +53,11 @@ function line(label: string, value: unknown): void {
 // ---------------------------------------------------------------------------
 
 console.log('\n1. quoting with no cap, to establish the real price\n');
+line('item', `${ITEM.title} (${ITEM.sku})`);
 
 const uncapped = await agnic.quoteGift({
   merchant_id: SANDBOX_MERCHANT_ID,
-  items: [{ sku: SANDBOX_SKU, quantity: 1 }],
+  items: [{ sku: ITEM.sku, quantity: 1 }],
   ship_to: SHIP_TO,
 });
 
@@ -69,7 +73,7 @@ if (uncapped.state === 'choose_delivery') {
 // Re-quote with a delivery option so the total is known.
 const priced = await agnic.quoteGift({
   merchant_id: SANDBOX_MERCHANT_ID,
-  items: [{ sku: SANDBOX_SKU, quantity: 1 }],
+  items: [{ sku: ITEM.sku, quantity: 1 }],
   ship_to: SHIP_TO,
   fulfillment_option_id:
     uncapped.state === 'choose_delivery' ? uncapped.deliveryOptions[0]?.id : undefined,
@@ -96,7 +100,7 @@ const constraints: Constraints = { max_total_minor: cap };
 
 const refused = await agnic.quoteGift({
   merchant_id: SANDBOX_MERCHANT_ID,
-  items: [{ sku: SANDBOX_SKU, quantity: 1 }],
+  items: [{ sku: ITEM.sku, quantity: 1 }],
   ship_to: SHIP_TO,
   constraints,
   fulfillment_option_id:
