@@ -1,0 +1,80 @@
+# Drive one pass of the background worker.
+#
+# The worker is a loop: claim a batch from the outbox, process it, sleep, repeat.
+# `npm run worker` runs that loop, which is fine locally and impossible on a
+# serverless host — there is nowhere for a long-lived process to live. So the
+# deployment exposes the same work as `GET /api/worker/tick`, one bounded pass,
+# and something has to call it on a schedule. This is that something.
+#
+# It is not decoration. Without a tick, a fan on the deployed instance can browse,
+# sign in and approve a ceiling, and then the order sits at `authorized` forever —
+# held, but never placed with the merchant. The tick is what turns "demonstrates
+# the flow" into "completes a purchase".
+#
+# GitHub's minimum for a scheduled workflow is five minutes, and it does not
+# promise punctuality — runs can be delayed under load. That is acceptable here
+# because each pass is cheap and resumable: an order that needs three passes
+# settles in three ticks rather than three seconds. For tighter timing, point any
+# external scheduler at the same endpoint with the same header.
+#
+# Requires one repository secret:
+#   Settings -> Secrets and variables -> Actions -> CRON_SECRET
+# with the value the deployment was given. Unset, this job exits quietly rather
+# than failing, because a missing secret is a configuration gap and not a bug.
+
+name: worker tick
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+# One at a time. The outbox claim is atomic, so overlap would not corrupt
+# anything — it would just waste runs racing for the same batch.
+concurrency:
+  group: worker-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the secret is configured
+        id: guard
+        run: |
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "CRON_SECRET is not set for this repository, so there is nothing to call."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Tick
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          code=$(curl -sS --max-time 60 -o body.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://creator-wishlist.vercel.app/api/worker/tick")
+
+          cat body.json
+          echo
+
+          case "$code" in
+            200)
+              echo "ok"
+              ;;
+            401)
+              # The endpoint is closed when the secret is unset, so a 401 here
+              # means the repository secret and the deployment disagree.
+              echo "::error::unauthorised -- CRON_SECRET does not match the deployment"
+              exit 1
+              ;;
+            *)
+              # Transient. The claim is durable, so the next tick picks the work
+              # back up; a red X on every hiccup would be noise.
+              echo "::warning::tick returned $code"
+              ;;
+          esac
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
