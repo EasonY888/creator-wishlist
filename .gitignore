@@ -16,3 +16,5 @@ reports/screenshots/
 # in history. The two raw captures alone are ~257 MB, and a binary that size is
 # painful to remove once it is committed -- git keeps it in every future clone.
 pitch/*.mp4
+.vercel
+.env*
