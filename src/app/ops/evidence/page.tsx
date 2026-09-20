@@ -579,8 +579,13 @@ export default async function EvidencePage() {
         </div>
       </Section>
 
+      {/* The only number on this page that is NOT read from the database.
+          It is a claim about the test suite, and it drifted: it read 187 while
+          the suite had grown to 202. Check it against `npm test` before you
+          record or present -- a slide number is exactly what this page exists
+          to replace. */}
       <p className="evidence-footer">
-        187 unit tests · 17 smoke suites against a real database · a real Stripe intent, a real
+        202 unit tests · 17 smoke suites against a real database · a real Stripe intent, a real
         signed webhook, and a real purchase at a real shop.
       </p>
     </main>
