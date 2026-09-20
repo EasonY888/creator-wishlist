@@ -192,3 +192,91 @@ describe('an unknown outcome on an ordinary order', () => {
     expect(reason).toMatch(/do not re-place/i);
   });
 });
+
+describe('what the queue calls paid', () => {
+  /**
+   * Found on the live instance. A settled order whose shop charged less than it
+   * quoted read as "Fan paid $17.94" in the queue, while the ledger had captured
+   * $15.99 -- and `/ops/evidence`, on the same instance, said the code decides
+   * $15.99. The page that checks our arithmetic disagreed with the one doing it.
+   *
+   * `fanTotalMinor` is the ceiling the fan authorised, and it has to stay that:
+   * it is what the refund path validates against. It is simply not what they
+   * paid, and a queue headed "Fan paid" must not print it as though it were.
+   */
+  function settled() {
+    return operatorOrderView({
+      orderId: 'ord_live',
+      fanId: 'fan_live',
+      creator: { id: 'c1', displayName: 'Test Creator', publicSlug: 'test-creator' },
+      state: 'succeeded',
+      fanTotalMinor: 1794,
+      markupMinor: 299,
+      merchantCapMinor: 1495,
+      currency: 'CAD',
+      createdAt: new Date(),
+      merchantOrder: {
+        providerOrderId: 'af_ord_test',
+        statusRaw: 'succeeded',
+        retryable: false,
+        retryAction: 'none',
+        action: null,
+        amountApprovedMinor: 1495,
+        amountChargedMinor: 1300,
+        pollCount: 15,
+        lastPolledAt: null,
+        dispatchClaimedAt: null,
+        dispatchedAt: null,
+        evidence: null,
+      },
+      ledger: [
+        { type: 'authorized', amountMinor: 1794, providerRef: 'pi_test', at: '2026-09-20T11:07:36Z' },
+        { type: 'captured', amountMinor: 1599, providerRef: 'pi_test', at: '2026-09-20T11:13:33Z' },
+      ],
+    });
+  }
+
+  it('reports what was captured, not the ceiling the fan approved', () => {
+    const { money } = settled();
+
+    expect(money.capturedMinor).toBe(1599);
+    expect(money.capturedMinor).not.toBe(money.fanTotalMinor);
+  });
+
+  it('reports what the shop charged, not its cap', () => {
+    const { money } = settled();
+
+    expect(money.chargedMinor).toBe(1300);
+    expect(money.chargedMinor).not.toBe(money.merchantCapMinor);
+  });
+
+  it('keeps the approved ceiling, because authorisation is not payment', () => {
+    expect(settled().money.fanTotalMinor).toBe(1794);
+  });
+
+  it('is null before anything is captured, so nothing can be called paid early', () => {
+    const pending = operatorViewInputWithoutCapture();
+
+    // Null rather than the ceiling: the queue needs to be able to say "held"
+    // instead of claiming a payment that has not happened.
+    expect(pending.money.capturedMinor).toBeNull();
+    expect(pending.money.chargedMinor).toBeNull();
+  });
+
+  function operatorViewInputWithoutCapture() {
+    return operatorOrderView({
+      orderId: 'ord_pending',
+      fanId: 'fan_live',
+      creator: { id: 'c1', displayName: 'Test Creator', publicSlug: 'test-creator' },
+      state: 'authorized',
+      fanTotalMinor: 1794,
+      markupMinor: 299,
+      merchantCapMinor: 1495,
+      currency: 'CAD',
+      createdAt: new Date(),
+      ledger: [
+        { type: 'authorized', amountMinor: 1794, providerRef: 'pi_test', at: '2026-09-20T11:07:36Z' },
+      ],
+    });
+  }
+});

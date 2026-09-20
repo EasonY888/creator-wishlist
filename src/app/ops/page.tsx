@@ -296,10 +296,22 @@ export default async function OpsPage({
                   <code>{view.provider?.statusRaw ?? '—'}</code>
                 </td>
                 <td className="money" style={{ textAlign: 'right' }}>
-                  {formatMoney(view.money.fanTotalMinor, view.money.currency)}
+                  {formatMoney(
+                    view.money.capturedMinor ?? view.money.fanTotalMinor,
+                    view.money.currency,
+                  )}
+                  {view.money.capturedMinor === null ? (
+                    <span className="muted small"> held</span>
+                  ) : null}
                 </td>
                 <td className="money" style={{ textAlign: 'right' }}>
-                  {formatMoney(view.money.merchantCapMinor, view.money.currency)}
+                  {formatMoney(
+                    view.money.chargedMinor ?? view.money.merchantCapMinor,
+                    view.money.currency,
+                  )}
+                  {view.money.chargedMinor === null ? (
+                    <span className="muted small"> cap</span>
+                  ) : null}
                 </td>
                 <td>
                   <RefundCell view={view} />

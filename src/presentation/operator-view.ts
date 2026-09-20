@@ -33,6 +33,25 @@ export interface OperatorLedgerEntry {
   at: string;
 }
 
+/**
+ * What the fan was actually charged, read from the ledger rather than a column.
+ *
+ * The ledger is the append-only record of what moved, so it is the only thing
+ * that can answer "paid" honestly. A ceiling is a different number the moment a
+ * shop charges less than it quoted -- which is the common case, and the entire
+ * reason this product authorises a maximum instead of a total.
+ *
+ * Summed rather than "the latest entry": a second capture would be a bug, and
+ * summing makes it show up as a wrong total rather than hiding behind the last
+ * one.
+ */
+function capturedFrom(ledger: OperatorLedgerEntry[]): number | null {
+  const captured = ledger.filter((entry) => entry.type === 'captured');
+  if (captured.length === 0) return null;
+
+  return captured.reduce((total, entry) => total + entry.amountMinor, 0);
+}
+
 export interface OperatorOrderView {
   orderId: string;
   fanId: string;
@@ -56,11 +75,24 @@ export interface OperatorOrderView {
   } | null;
 
   money: {
-    /** What the fan pays: merchant amount plus markup. */
+    /**
+     * The ceiling the fan approved: merchant amount plus markup.
+     *
+     * Still the number that governs authorisation -- nothing may charge above
+     * it, whatever actually moved -- which is exactly why it must not be shown
+     * as what the fan "paid". See `capturedMinor`.
+     */
     fanTotalMinor: number;
     markupMinor: number;
     merchantCapMinor: number;
     currency: string;
+    /** What the fan was actually charged, from the ledger. Null until captured. */
+    capturedMinor: number | null;
+    /**
+     * What the shop actually charged us. Null while the merchant's figure is
+     * unknown, which is not the same thing as its cap.
+     */
+    chargedMinor: number | null;
     ledger: OperatorLedgerEntry[];
   };
 
@@ -246,6 +278,8 @@ export function operatorOrderView(
       markupMinor: input.markupMinor,
       merchantCapMinor: input.merchantCapMinor,
       currency: input.currency,
+      capturedMinor: capturedFrom(input.ledger ?? []),
+      chargedMinor: input.merchantOrder?.amountChargedMinor ?? null,
       ledger: input.ledger ?? [],
     },
 
