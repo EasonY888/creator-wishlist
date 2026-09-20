@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Creator Wishlist — Track 01 · Team Loong</title>
+<style>
+  /* Self-contained: no fonts, no images, no network. Ctrl+P -> Save as PDF. */
+  :root {
+    --bg: #0B0F17;
+    --panel: #121826;
+    --line: #232C40;
+    --ink: #E9EEF7;
+    --muted: #8B97AC;
+    --good: #34D399;
+    --bad: #F87171;
+    --warn: #FBBF24;
+    --accent: #60A5FA;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #05070B; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .slide {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    padding: 60px 68px;
+    background: var(--bg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Screen preview only: stack with a gap. Removed in print. */
+  @media screen {
+    body { padding: 28px 0; display: flex; flex-direction: column; align-items: center; gap: 28px; }
+    .slide { box-shadow: 0 24px 60px rgba(0,0,0,.55); border-radius: 10px; }
+  }
+
+  @page { size: 1280px 720px; margin: 0; }
+  @media print {
+    html, body { background: #fff; }
+    body { padding: 0; display: block; }
+    .slide {
+      border-radius: 0;
+      box-shadow: none;
+      page-break-after: always;
+      break-after: page;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .slide:last-child { page-break-after: auto; break-after: auto; }
+  }
+
+  /* ---- shared bits ---- */
+  .kicker {
+    font: 600 13px/1 var(--mono);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 { font-size: 52px; line-height: 1.1; letter-spacing: -.02em; font-weight: 700; }
+  h2 { font-size: 36px; line-height: 1.15; letter-spacing: -.015em; font-weight: 680; }
+  .sub { font-size: 19px; line-height: 1.5; color: var(--muted); }
+  .foot {
+    position: absolute; left: 68px; right: 68px; bottom: 26px;
+    display: flex; justify-content: space-between; align-items: center;
+    font: 500 12px/1 var(--mono); color: #55617A;
+    border-top: 1px solid var(--line); padding-top: 14px;
+  }
+  .n { font: 600 12px/1 var(--mono); color: var(--muted); }
+  .hr { height: 1px; background: var(--line); }
+
+  /* ---- 1 · cover ---- */
+  .cover { justify-content: center; }
+  .cover .logo {
+    display: inline-flex; align-items: center; gap: 10px;
+    font: 600 13px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 34px;
+  }
+  .cover .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--good); box-shadow: 0 0 14px var(--good); }
+  .cover h1 { font-size: 58px; max-width: 1000px; }
+  .cover .them { color: var(--muted); font-weight: 500; }
+  .cover .us { color: var(--ink); }
+  .cover .meta {
+    margin-top: 46px; padding-top: 26px; border-top: 1px solid var(--line);
+    display: flex; gap: 56px;
+  }
+  .cover .meta dt { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #55617A; margin-bottom: 9px; }
+  .cover .meta dd { font-size: 17px; }
+
+  /* ---- 2 · the gap ---- */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 34px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 28px;
+  }
+  .card.bad { border-color: #43242B; background: #170F13; }
+  .card.good { border-color: #1D3B33; background: #0C1714; }
+  .card h3 { font-size: 16px; font-weight: 650; margin-bottom: 16px; letter-spacing: -.01em; }
+  .card.bad h3 { color: var(--bad); }
+  .card.good h3 { color: var(--good); }
+  ul.tick { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  ul.tick li { position: relative; padding-left: 26px; font-size: 16px; line-height: 1.42; color: #C3CDDE; }
+  ul.tick li::before {
+    content: ""; position: absolute; left: 4px; top: 8px;
+    width: 8px; height: 8px; border-radius: 2px; background: currentColor; opacity: .55;
+  }
+  .card.bad ul.tick li::before { background: var(--bad); opacity: .8; }
+  .card.good ul.tick li::before { background: var(--good); opacity: .9; }
+
+  .claim {
+    margin-top: 30px; padding: 20px 26px; border-radius: 12px;
+    background: linear-gradient(90deg, rgba(96,165,250,.14), rgba(96,165,250,.03));
+    border: 1px solid rgba(96,165,250,.28);
+    font-size: 20px; line-height: 1.45;
+  }
+  .claim b { color: #fff; }
+
+  /* ---- 3 · architecture ---- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 26px; }
+  .who { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; }
+  .who .tag { font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; margin-bottom: 14px; }
+  .who.ours .tag { color: var(--accent); }
+  .who.theirs .tag { color: var(--muted); }
+  .who p { font-size: 16px; line-height: 1.5; color: #C3CDDE; }
+
+  .flow { margin-top: 30px; display: flex; align-items: stretch; gap: 0; }
+  .step {
+    flex: 1; background: var(--panel); border: 1px solid var(--line);
+    padding: 16px 14px; text-align: center;
+  }
+  .step:first-child { border-radius: 10px 0 0 10px; }
+  .step:last-child { border-radius: 0 10px 10px 0; border-color: #1D3B33; background: #0C1714; }
+  .step + .step { border-left: none; }
+  .step .t { font: 600 13px/1 var(--mono); color: var(--muted); margin-bottom: 8px; }
+  .step .d { font-size: 14px; line-height: 1.35; color: #D6DEEE; }
+  .step:last-child .t { color: var(--good); }
+
+  .railnote { margin-top: 18px; font-size: 15px; color: var(--muted); line-height: 1.5; }
+  .railnote code { font: 500 14px/1 var(--mono); color: #A9B6CC; }
+
+  /* ---- 4 · money moment ---- */
+  .money { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 28px; }
+  .num { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 20px 22px; }
+  .num .l { font: 600 11px/1.3 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; min-height: 26px; }
+  .num .v { font: 700 40px/1 var(--mono); letter-spacing: -.02em; }
+  .num .n { font-size: 13px; color: #55617A; margin-top: 10px; }
+  .num.fixed { border-color: #1D3B33; background: #0C1714; }
+  .num.fixed .v { color: var(--good); }
+  .num.bug { border-color: #43242B; background: #170F13; }
+  .num.bug .v { color: var(--bad); }
+
+  .verdict {
+    margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+  }
+  .vbox { border-radius: 12px; padding: 18px 22px; border: 1px solid var(--line); background: var(--panel); }
+  .vbox .h { font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 12px; }
+  .vbox.bug .h { color: var(--bad); }
+  .vbox.fixed .h { color: var(--good); }
+  .vbox .row { display: flex; align-items: baseline; gap: 14px; font-size: 15px; color: #C3CDDE; }
+  .vbox .row + .row { margin-top: 8px; }
+  .vbox .row b { font: 600 17px/1 var(--mono); color: var(--ink); }
+  .vbox .row .x { color: var(--bad); font-weight: 600; }
+  .vbox .row .ok { color: var(--good); font-weight: 600; }
+
+  .prov { margin-top: 22px; font-size: 15px; line-height: 1.5; color: var(--muted); }
+  .prov b { color: #C3CDDE; font-weight: 600; }
+
+  /* ---- 5 · address ---- */
+  .two { display: grid; grid-template-columns: 1.05fr 1fr; gap: 26px; margin-top: 28px; }
+  .code {
+    background: #070A10; border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; font: 500 13px/1.7 var(--mono); color: #9FB0C9; overflow: hidden;
+  }
+  .code .k { color: var(--accent); }
+  .code .s { color: #6EE7B7; word-break: break-all; }
+  .code .c { color: #55617A; }
+  .why { font-size: 15px; line-height: 1.55; color: var(--muted); margin-top: 16px; }
+  .why b { color: #C3CDDE; }
+  .guard {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 14px;
+  }
+  .guard .t { font: 600 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; margin-bottom: 10px; }
+  .guard.no .t { color: var(--good); }
+  .guard.yes .t { color: var(--warn); }
+  .guard .b { font: 500 13px/1.6 var(--mono); color: #9FB0C9; }
+  .guard .b .r { color: var(--bad); }
+
+  /* ---- 6 · what's real ---- */
+  .real { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 26px; }
+  .real .col h3 { font: 600 12px/1 var(--mono); letter-spacing: .15em; text-transform: uppercase; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .real .col.y h3 { color: var(--good); }
+  .real .col.n h3 { color: var(--warn); }
+  .real ul { list-style: none; display: flex; flex-direction: column; gap: 13px; }
+  .real li { font-size: 15px; line-height: 1.45; color: #C3CDDE; padding-left: 20px; position: relative; }
+  .real li::before { content: ""; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+  .real .col.y li::before { background: var(--good); opacity: .85; }
+  .real .col.n li::before { background: var(--warn); opacity: .85; }
+  .real code { font: 500 13px/1 var(--mono); color: #A9B6CC; }
+
+  .stats { margin-top: 26px; display: flex; gap: 46px; padding-top: 22px; border-top: 1px solid var(--line); }
+  .stats div .v { font: 700 26px/1 var(--mono); }
+  .stats div .l { font: 600 11px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); margin-top: 9px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ 1 · COVER ══════════════ -->
+<section class="slide cover">
+  <div class="logo"><span class="dot"></span> Track 01 &middot; Agentic Checkout</div>
+
+  <h1>
+    <span class="them">Agnic answers whether an agent can complete a checkout.</span><br />
+    <span class="us">We answer what the fan approved — and whether they paid exactly that.</span>
+  </h1>
+
+  <dl class="meta">
+    <div><dt>Team</dt><dd>Team Loong</dd></div>
+    <div><dt>Presented by</dt><dd>Eason &middot; online</dd></div>
+    <div><dt>Builds on</dt><dd>Agnic HTTP API &middot; Stripe</dd></div>
+  </dl>
+
+  <div class="foot"><span>creator-wishlist</span><span class="n">1 / 6</span></div>
+</section>
+
+<!-- ══════════════ 2 · THE GAP ══════════════ -->
+<section class="slide">
+  <div class="kicker">The gap we close</div>
+  <h2 style="margin-top:14px">The merchant's final total is not knowable in advance.</h2>
+  <p class="sub" style="margin-top:14px; max-width:900px">
+    The shop adds tax at checkout. So &ldquo;the fan approves a total&rdquo; cannot be implemented
+    literally — and the obvious workaround is wrong twice.
+  </p>
+
+  <div class="cols">
+    <div class="card bad">
+      <h3>The obvious implementation</h3>
+      <ul class="tick">
+        <li>Authorise a ceiling, capture the whole thing</li>
+        <li>Refund the difference afterwards</li>
+        <li>Two statement lines for one gift</li>
+        <li>A refund fee on every order</li>
+        <li>A window where the fan's money is simply gone</li>
+      </ul>
+    </div>
+    <div class="card good">
+      <h3>What we do instead</h3>
+      <ul class="tick">
+        <li>Fan approves a <b>ceiling</b>, and the UI says so</li>
+        <li>We hold the money — we don't take it</li>
+        <li>The shop's real total comes back from the settlement</li>
+        <li>We capture <b>once</b>, for the number we showed</li>
+        <li>The difference is released, not refunded</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="claim">
+    A ceiling is never presented as a total. When the shop charges less, the saving
+    <b>goes back to the fan</b> — we do not keep the difference.
+  </div>
+
+  <div class="foot"><span>creator-wishlist</span><span class="n">2 / 6</span></div>
+</section>
+
+<!-- ══════════════ 3 · WHAT WE BUILT ══════════════ -->
+<section class="slide">
+  <div class="kicker">What we built</div>
+  <h2 style="margin-top:14px">Two rails, deliberately asymmetrical.</h2>
+
+  <div class="split">
+    <div class="who ours">
+      <div class="tag">We build</div>
+      <p>Creator accounts &middot; wishlist curation &middot; the fan's payment rail on Stripe &middot;
+         the approval record &middot; the order state machine &middot; operator tooling for the cases
+         that need a human.</p>
+    </div>
+    <div class="who theirs">
+      <div class="tag">Agnic handles</div>
+      <p>Finding products &middot; quoting delivery to a protected address &middot; executing the
+         merchant checkout &middot; the approval handshake when a shop demands one.</p>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="step"><div class="t">list</div><div class="d">Creator adds a product by link</div></div>
+    <div class="step"><div class="t">approve</div><div class="d">Fan approves a ceiling</div></div>
+    <div class="step"><div class="t">hold</div><div class="d">Stripe authorises, no capture</div></div>
+    <div class="step"><div class="t">dispatch</div><div class="d">Agnic buys from the shop</div></div>
+    <div class="step"><div class="t">capture</div><div class="d">Exactly the number shown</div></div>
+  </div>
+
+  <p class="railnote">
+    Every state change passes one machine — eleven states, and an illegal transition <b>throws</b>
+    rather than being silently recorded. There is no path to a merchant purchase that skips the
+    fan's explicit approval: <code>src/orders/dispatcher.ts</code> is the only code in the
+    entire build that can spend money.
+  </p>
+
+  <div class="foot"><span>creator-wishlist</span><span class="n">3 / 6</span></div>
+</section>
+
+<!-- ══════════════ 4 · THE MONEY MOMENT ══════════════ -->
+<section class="slide">
+  <div class="kicker">The money moment</div>
+  <h2 style="margin-top:14px">We captured the ceiling and kept $4.94 having shown $2.99.</h2>
+
+  <div class="money">
+    <div class="num"><div class="l">Fan approved<br />(the ceiling)</div><div class="v">17.94</div><div class="n">14.95 estimate + 2.99 fee</div></div>
+    <div class="num"><div class="l">Merchant charged<br />(real settlement)</div><div class="v">13.00</div><div class="n">Agnic, the real shop</div></div>
+    <div class="num bug"><div class="l">Captured<br />at the time</div><div class="v">17.94</div><div class="n">the whole ceiling — the bug</div></div>
+    <div class="num fixed"><div class="l">Captured<br />today's code</div><div class="v">15.99</div><div class="n">13.00 + the fee we showed</div></div>
+  </div>
+
+  <div class="verdict">
+    <div class="vbox bug">
+      <div class="h">Before</div>
+      <div class="row"><span>Fee shown to the fan</span><b>2.99</b></div>
+      <div class="row"><span>Fee actually kept</span><b class="x">4.94</b></div>
+      <div class="row"><span>Overcharged, silently</span><b class="x">1.95</b></div>
+    </div>
+    <div class="vbox fixed">
+      <div class="h">After</div>
+      <div class="row"><span>Fee shown to the fan</span><b>2.99</b></div>
+      <div class="row"><span>Fee kept</span><b class="ok">2.99</b></div>
+      <div class="row"><span>Released back instead</span><b class="ok">1.95</b></div>
+    </div>
+  </div>
+
+  <p class="prov">
+    Found against the <b>live sandbox</b>. The shop charged <b>less</b> than the ceiling, and no
+    test double can produce that — which is exactly why a fully green suite never caught it.
+    The refusal to capture more than was shown is now a function, not a convention.
+  </p>
+
+  <div class="foot"><span>creator-wishlist</span><span class="n">4 / 6</span></div>
+</section>
+
+<!-- ══════════════ 5 · THE ADDRESS ══════════════ -->
+<section class="slide">
+  <div class="kicker">The promise, proven</div>
+  <h2 style="margin-top:14px">The creator's address never reaches the fan.</h2>
+
+  <div class="two">
+    <div>
+      <div class="code">
+        <span class="k">CreatorAddress.ciphertext</span><br />
+        <span class="s">v1:9fKq2R...A7mZ0t...x81LpQ==</span><br /><br />
+        <span class="c">// AES-256-GCM, encrypted before the row is written.</span><br />
+        <span class="c">// A missing key throws. There is no plaintext fallback.</span>
+      </div>
+      <p class="why">
+        The digest beside it is deliberately <b>not</b> encrypted — it is taken over the
+        <b>plaintext</b>. If it moved with the encryption key, rotating that key would silently
+        cancel every outstanding approval. The order carries the digest, never the address.
+      </p>
+    </div>
+    <div>
+      <div class="guard no">
+        <div class="t">Fan payload</div>
+        <div class="b">no address field exists to leak — not redacted, <b>absent</b></div>
+      </div>
+      <div class="guard yes">
+        <div class="t">Operator payload</div>
+        <div class="b">...<span class="r">refused: postal_address.street_address, address_locality, postal_code</span></div>
+      </div>
+      <p class="why">
+        The guard names the offending fields and refuses to build the payload — and there is a
+        test that fails if it ever becomes vacuous. When the creator moves house, the outstanding
+        order <b>refuses</b> rather than shipping to the wrong door.
+      </p>
+    </div>
+  </div>
+
+  <div class="foot"><span>creator-wishlist</span><span class="n">5 / 6</span></div>
+</section>
+
+<!-- ══════════════ 6 · WHAT'S REAL ══════════════ -->
+<section class="slide">
+  <div class="kicker">Provenance &amp; scope</div>
+  <h2 style="margin-top:14px">What is real, and what is deliberately scoped.</h2>
+
+  <div class="real">
+    <div class="col y">
+      <h3>Real, end to end</h3>
+      <ul>
+        <li>A real merchant settlement: the shop was charged <b>13.00</b> through Agnic — <code>af_ord_mu8yhh4hhi7zo6az</code></li>
+        <li>A real Stripe PaymentIntent in test mode, authorised then captured — <code>pi_3UHWgs&hellip;1Z59KStW</code></li>
+        <li>Real address encryption at rest, AES-256-GCM, with no plaintext path</li>
+        <li>Real operator authentication, real refund route, real audit trail</li>
+      </ul>
+    </div>
+    <div class="col n">
+      <h3>Scoped, and stated as such</h3>
+      <ul>
+        <li>The exhibit order's <b>fan</b> rail ran on the in-memory double — the <code>pay_&hellip;</code> refs show it. That is what lets us <i>show</i> the bug without moving money</li>
+        <li>Stripe is in test mode: the amounts are real, the funds are not</li>
+        <li>One sandbox merchant's gateway accepts the test card; its storefront has no public product URLs, so its catalogue is synced by script</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div><div class="v">202</div><div class="l">tests passing</div></div>
+    <div><div class="v">21 / 21</div><div class="l">preflight checks</div></div>
+    <div><div class="v">11</div><div class="l">order states</div></div>
+    <div><div class="v">2</div><div class="l">live settlements</div></div>
+  </div>
+
+  <div class="foot"><span>creator-wishlist</span><span class="n">6 / 6</span></div>
+</section>
+
+</body>
+</html>
