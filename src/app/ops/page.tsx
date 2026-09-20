@@ -74,6 +74,43 @@ function providerAccount(view: OperatorOrderView): string | null {
 }
 
 /**
+ * What a step-up means, in the words of the next thing to do about it.
+ *
+ * The three reasons look alike and are not: one resolves by confirming a code,
+ * one needs a passkey, and one never resolves at all until the spending mandate
+ * is reissued in the shop's currency. An operator who treats the last as the
+ * first will confirm codes until the window closes.
+ */
+function stepUpSentence(reason: string | null): string {
+  switch (reason) {
+    case 'cvv_refresh_required':
+      return "The vault holds the platform card's security code for about fifty minutes and no longer, so the shop is asking for it again. Nothing was charged. Any three digits will do — the order resumes on its own.";
+    case 'approval_not_ready':
+      return 'This falls outside the signed mandate and needs a passkey approval before the shop will proceed.';
+    case 'currency_mismatch':
+      return 'The spending mandate is not in the shop’s currency. Confirming will not help — retrying never succeeds and the mandate has to be reissued.';
+    default:
+      return 'The shop is waiting on an approval before it will finish the order.';
+  }
+}
+
+/**
+ * How long the link stays usable.
+ *
+ * Short — minutes, not hours — which is the whole reason this is worth showing
+ * rather than merely recording. A countdown that has already run out says so
+ * instead of inviting a click that cannot work.
+ */
+function stepUpTimeLeft(expiresAtIso: string): string {
+  const seconds = Math.round((new Date(expiresAtIso).getTime() - Date.now()) / 1000);
+  if (seconds <= 0) return 'this window has lapsed; a fresh dispatch opens a new one';
+
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${String(rest).padStart(2, '0')}s left` : `${rest}s left`;
+}
+
+/**
  * Whether an order can be refunded, and if not, what is stopping it.
  *
  * Returned as a reason rather than a boolean because "why can't I refund this?"
@@ -145,6 +182,17 @@ export default async function OpsPage({
       approvedRequest: true,
       paymentEvents: { orderBy: { createdAt: 'asc' } },
       orderEvents: { orderBy: { createdAt: 'asc' } },
+      // The step-up the shop is waiting on, if there is one.
+      //
+      // Reached until now only by running `scripts/pending-approval.ts` against
+      // the database, which meant a deployed instance had no way to tell a
+      // person where to confirm the platform's card -- the step-up was visible
+      // as a state and invisible as an action.
+      approvalWindows: {
+        where: { consumedAt: null },
+        orderBy: { expiresAt: 'asc' },
+        take: 1,
+      },
     },
   });
 
@@ -210,6 +258,8 @@ export default async function OpsPage({
         note: event.note,
         actor: event.actor,
       })),
+      approvalReason: order.approvalWindows[0]?.reason ?? null,
+      stepUp: order.approvalWindows[0] ?? null,
       // No auth yet, so sensitive fields stay redacted by default.
     }),
   );
@@ -294,6 +344,19 @@ export default async function OpsPage({
               <div className="small" style={{ marginTop: '0.6rem' }}>
                 <strong>Next:</strong> {view.recommendedAction}
               </div>
+
+              {/* A step-up is the one thing on this page a person has to go
+                  somewhere else to do. Naming it without the link is what made
+                  a deployed order un-resumable by anyone at the keyboard. */}
+              {view.stepUp === null ? null : (
+                <div className="small" style={{ marginTop: '0.6rem' }}>
+                  <strong>Waiting on a step-up.</strong> {stepUpSentence(view.stepUp.reason)}{' '}
+                  <a href={view.stepUp.approvalUrl} target="_blank" rel="noreferrer">
+                    Open the confirmation page
+                  </a>{' '}
+                  <span className="muted">— {stepUpTimeLeft(view.stepUp.expiresAtIso)}</span>
+                </div>
+              )}
 
               <div className="muted small mono">
                 ship_to digest <code>{view.approval?.shipToDigest.slice(0, 12)}…</code> ·

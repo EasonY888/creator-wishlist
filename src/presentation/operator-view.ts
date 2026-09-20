@@ -178,6 +178,25 @@ export interface OperatorOrderView {
     screenshotStages: string[];
   } | null;
 
+  /**
+   * A step-up the shop is waiting on, and where a person completes it.
+   *
+   * OPERATOR ONLY, and `approvalUrl` is named deliberately: the leak guard in
+   * `sensitive.ts` refuses that key by name, so this cannot reach a fan payload
+   * by accident.
+   *
+   * Routine rather than a fault. The vault holds a card's security code for
+   * about fifty minutes and is prohibited from holding it longer, so every hour
+   * or so a dispatch answers `cvv_refresh_required`. Nothing is charged and
+   * nothing is broken; a person re-enters three digits and the order resumes on
+   * its own.
+   *
+   * It lives here because a deployed instance had no way to say where to go.
+   * The URL was reachable only by running `scripts/pending-approval.ts` against
+   * the database, so the demo had a step-up nobody at the keyboard could clear.
+   */
+  stepUp: { reason: string | null; approvalUrl: string; expiresAtIso: string } | null;
+
   approval: {
     merchantId: string;
     amountMinor: number;
@@ -247,6 +266,15 @@ export interface OperatorOrderViewInput {
   timeline?: OperatorTimelineEntry[];
   /** Reason from a pending approval window, when one is open. */
   approvalReason?: string | null;
+  /**
+   * The open approval window itself, when there is one.
+   *
+   * Passed whole rather than as a reason string, because the reason says what
+   * happened and the URL says what a person has to do about it. Until this
+   * arrived the queue could report that an order was waiting on a step-up and
+   * offer nobody a way to complete one.
+   */
+  stepUp?: { reason: string | null; approvalUrl: string; expiresAt: Date } | null;
   /**
    * Whether this viewer may see the address-bearing fields. Defaults to false,
    * so forgetting to pass it withholds rather than exposes.
@@ -366,6 +394,15 @@ export function operatorOrderView(
     },
 
     providerEvidence: providerEvidenceFrom(input.merchantOrder?.evidence),
+
+    stepUp:
+      input.stepUp === undefined || input.stepUp === null
+        ? null
+        : {
+            reason: input.stepUp.reason,
+            approvalUrl: input.stepUp.approvalUrl,
+            expiresAtIso: input.stepUp.expiresAt.toISOString(),
+          },
 
     approval:
       input.approvedRequest === undefined || input.approvedRequest === null
