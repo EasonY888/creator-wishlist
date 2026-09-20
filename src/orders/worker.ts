@@ -352,13 +352,27 @@ export async function runWorkerLoop(
     onDrain?: (result: DrainResult) => void;
     /** How often to sweep for tasks abandoned by a dead worker. */
     recoverEveryMs?: number;
+    /**
+     * Stop after this long, rather than running until `signal` aborts.
+     *
+     * For a host that gets one bounded invocation instead of a process: it can
+     * afford a slice of the loop, not the loop. The interval is what makes the
+     * slice worth taking -- a status poll is re-queued three seconds out, so a
+     * single pass advances one step while a budget advances several, which is
+     * the difference between settling an order in minutes and in hours.
+     */
+    budgetMs?: number;
   } = {},
 ): Promise<void> {
   const intervalMs = options.intervalMs ?? 1000;
   const recoverEveryMs = options.recoverEveryMs ?? 60_000;
+  const until = options.budgetMs === undefined ? null : Date.now() + options.budgetMs;
   let lastRecovery = Date.now();
 
   while (!options.signal?.aborted) {
+    // Checked before taking work, so a budget that is nearly spent cannot claim
+    // a task it will not finish and leave the claim to sit out its timeout.
+    if (until !== null && Date.now() >= until) break;
     // Out of quota. Claiming work now would burn an attempt on a call the
     // provider is going to refuse, and leave the task sitting out its backoff
     // afterwards -- strictly worse than simply waiting.

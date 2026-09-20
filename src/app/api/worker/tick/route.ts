@@ -5,8 +5,8 @@
  * repeats. Serverless platforms have no room for that loop — but they do not need
  * one. Every call the worker makes is short: `POST /dispatch` starts a merchant
  * order, and the ~60s it takes to settle is spread across many separate status
- * polls, each a fast request. So the work is naturally resumable, and one pass per
- * tick is enough to move an order forward.
+ * polls, each a fast request. So the work is naturally resumable: a tick that
+ * stops early loses nothing, and the next one carries on from where it stopped.
  *
  * This matters because the worker is the only thing that calls the provider with
  * money attached. Without it a deployed instance can browse and quote, but a fan
@@ -22,7 +22,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { drainOnce } from '@/orders/worker';
+import { runWorkerLoop, type DrainResult } from '@/orders/worker';
 import { workerDeps } from '@/services';
 
 export const dynamic = 'force-dynamic';
@@ -33,6 +33,21 @@ export const dynamic = 'force-dynamic';
  * leave a claim stranded mid-flight.
  */
 export const maxDuration = 30;
+
+/**
+ * How long one tick may work for.
+ *
+ * Under `maxDuration`, so the response is never the thing that runs out of time.
+ * A single pass would be almost useless on a scheduler: `drainOnce` claims only
+ * what is due now, and a settlement re-queues each status poll a few seconds out,
+ * so one pass advances one step of a twenty-step wait. A budget lets the tick
+ * cover several steps per call, which is the difference between an order settling
+ * in minutes and in hours.
+ */
+const TICK_BUDGET_MS = 25_000;
+
+/** Per pass, not per tick. Small for the same reason as `maxDuration`. */
+const TICK_BATCH = 4;
 
 function authorised(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -46,23 +61,34 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'unauthorised' }, { status: 401 });
   }
 
-  try {
-    const result = await drainOnce(workerDeps('cron'), { limit: 4 });
+  const drains: DrainResult[] = [];
+  const claimedTotal = (): number =>
+    drains.reduce((total, drain) => total + drain.claimed, 0);
 
-    return NextResponse.json({
-      claimed: result.claimed,
-      reports: result.reports.map((report) => ({
-        topic: report.topic,
-        action: report.action,
-        result: report.result,
-      })),
+  try {
+    await runWorkerLoop(workerDeps('cron'), {
+      batchSize: TICK_BATCH,
+      budgetMs: TICK_BUDGET_MS,
+      onDrain: (result) => drains.push(result),
     });
   } catch (cause) {
     // A failed tick is not a failed order: the claim is durable, so the next tick
     // picks the work back up. Say so rather than returning a bare 500.
     return NextResponse.json(
-      { error: 'tick_failed', detail: String(cause) },
+      { error: 'tick_failed', detail: String(cause), passes: drains.length, claimed: claimedTotal() },
       { status: 500 },
     );
   }
+
+  return NextResponse.json({
+    passes: drains.length,
+    claimed: claimedTotal(),
+    reports: drains.flatMap((drain) =>
+      drain.reports.map((report) => ({
+        topic: report.topic,
+        action: report.action,
+        result: report.result,
+      })),
+    ),
+  });
 }
