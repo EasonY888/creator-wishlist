@@ -36,7 +36,12 @@ const slugArg = process.argv.find((arg) => arg.startsWith('--slug='));
 const SLUG = slugArg === undefined ? 'live-creator' : slugArg.slice('--slug='.length);
 
 const SANDBOX_MERCHANT_ID = 'merchant_untitled_fidget_shop';
-const SANDBOX_SKU = 'gid://shopify/ProductVariant/43945235349570'; // Hex Token Fidget, 100 CAD
+// Re-check against the sync before the demo: this must be an item the shop
+// reports `available` right now, or the quote below fails with `unfulfillable`
+// and the script stops before spending anything. As of the last sync, Pixel
+// Heart Fidget and Flexi Starfish Fidget quote a delivery option; the other
+// four SKUs report no local fulfilment.
+const SANDBOX_SKU = 'gid://shopify/ProductVariant/43830015066178'; // Pixel Heart Fidget
 
 const ADDRESS = {
   fullName: 'Live Test Creator',
@@ -152,9 +157,9 @@ const item = await prisma.wishlistItem.create({
     merchantId: SANDBOX_MERCHANT_ID,
     merchantName: 'untitled-fidget.shop',
     sku: SANDBOX_SKU,
-    title: 'Hex Token Fidget',
+    title: 'Pixel Heart Fidget',
     currency: 'CAD',
-    lastPriceMinor: 100,
+    lastPriceMinor: 1400,
     lastCheckedAt: new Date(),
     status: 'active',
   },

@@ -1,5 +1,6 @@
 'use server';
 
+import { after } from 'next/server';
 import { redirect } from 'next/navigation';
 import {
   approveAndAuthorize,
@@ -223,6 +224,38 @@ export type VerifyResult =
   | { state: 'failed'; message: string };
 
 /**
+ * Kick the worker the moment a payment authorizes, so the order is dispatched
+ * within seconds instead of waiting for the next scheduled tick.
+ *
+ * GitHub's schedule floor is five minutes, and without this a fan who taps
+ * "Send this gift" on the deployed site leaves the order held at `authorized`
+ * for up to that long before it is placed with the merchant. The scheduled tick
+ * stays as the backstop and as the polling cadence; this only removes the dead
+ * wait at the front.
+ *
+ * Runs inside `after` so the fan's confirmation is not delayed by the worker's
+ * work: the response goes out first, then the tick fires in its own invocation.
+ */
+async function kickWorkerTick(): Promise<void> {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return;
+
+  const host =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ??
+    process.env.VERCEL_URL ??
+    'localhost:3000';
+  const origin = /^https?:\/\//.test(host) ? host : `https://${host}`;
+
+  try {
+    await fetch(`${origin}/api/worker/tick`, {
+      headers: { authorization: `Bearer ${secret}` },
+    });
+  } catch {
+    // The order is queued in the outbox; the scheduled tick will pick it up.
+  }
+}
+
+/**
  * Verify the hold the browser just placed, then queue the purchase.
  *
  * This deliberately does NOT trust that the browser returned successfully. It
@@ -238,6 +271,7 @@ export async function verifyPayment(fanOrderId: string): Promise<VerifyResult> {
 
   switch (result.state) {
     case 'authorized':
+      after(kickWorkerTick);
       return { state: 'authorized' };
 
     case 'payment_failed':

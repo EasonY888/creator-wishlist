@@ -7,6 +7,7 @@ import { durationWords, formatMoney } from '@/presentation/money';
 import { operatorOrderView, type OperatorOrderView } from '@/presentation/operator-view';
 import { requireOperator } from '@/ops/server';
 import { signOut } from './login/actions';
+import { pollNow } from './actions';
 import RefundForm from './RefundForm';
 import ResolveForm from './ResolveForm';
 
@@ -276,9 +277,16 @@ export default async function OpsPage({
       <div className="hero">
         <div className="row">
           <h1>Order queue</h1>
-          <form action={signOut}>
-            <button type="submit">Sign out</button>
-          </form>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <form action={pollNow}>
+              <button type="submit" title="Run one pass of the worker now">
+                Poll now
+              </button>
+            </form>
+            <form action={signOut}>
+              <button type="submit">Sign out</button>
+            </form>
+          </div>
         </div>
         <p className="small">
           <Link href="/ops/evidence">What the product does not show you &rarr;</Link>

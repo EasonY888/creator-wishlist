@@ -3,8 +3,9 @@
 import { redirect } from 'next/navigation';
 
 import { recordRefund, resolveOrder, type OperatorOutcome, type ResolutionOutcome } from '@/orders/operator';
+import { runWorkerLoop } from '@/orders/worker';
 import { requireOperator } from '@/ops/server';
-import { services } from '@/services';
+import { services, workerDeps } from '@/services';
 
 /**
  * Operator actions.
@@ -147,4 +148,23 @@ export async function resolveStuckOrder(form: FormData): Promise<void> {
   redirect(
     `/ops?${flag}=${encodeURIComponent(resolutionReason(result))}&order=${encodeURIComponent(fanOrderId)}`,
   );
+}
+
+/**
+ * Run one bounded pass of the worker now, on the operator's click.
+ *
+ * The queue names problems; this is how an operator advances them without
+ * waiting for the next scheduled tick. A short budget keeps the click snappy —
+ * the work is resumable, so whatever this pass does not finish, the next tick
+ * (scheduled, or another click) picks up.
+ */
+export async function pollNow(): Promise<void> {
+  await requireOperator();
+
+  await runWorkerLoop(workerDeps('operator-click'), {
+    batchSize: 4,
+    budgetMs: 3_000,
+  });
+
+  redirect('/ops?note=Worker pass complete.');
 }
